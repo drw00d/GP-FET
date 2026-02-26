@@ -53,7 +53,6 @@
   }
 
   .container { max-width: 860px; margin: 24px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
-
   .card { background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
   .card-body { padding: 20px 24px; }
 
@@ -72,7 +71,7 @@
 
   .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
   .form-row-5 { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
-  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .form-row-1 { display: grid; grid-template-columns: 1fr; gap: 14px; margin-bottom: 20px; }
 
   .field { display: flex; flex-direction: column; gap: 5px; }
   .field label { font-size: 11px; font-weight: 600; color: var(--label); text-transform: uppercase; letter-spacing: 0.06em; }
@@ -170,6 +169,9 @@
     margin-top: 6px;
     font-style: italic;
   }
+
+  /* Hide Google's "powered by" suggestions from being clipped by overflow (we use fixed overlay anyway) */
+  .pac-container { z-index: 999999 !important; }
 </style>
 </head>
 
@@ -192,7 +194,7 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    CONFIG
 ────────────────────────────────────────────────────────────────────────────── */
-const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg"; // Restrict by referrer + API restrictions in Google Cloud
+const GMAPS_KEY = "PASTE_YOUR_GOOGLE_KEY_HERE"; // <-- paste your key
 
 /* ─────────────────────────────────────────────────────────────────────────────
    STATE
@@ -211,11 +213,10 @@ function loadGoogleMapsJS() {
   if (_gmapsPromise) return _gmapsPromise;
 
   _gmapsPromise = new Promise((resolve, reject) => {
-    if (!GMAPS_KEY || GMAPS_KEY.includes("AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg")) {
+    if (!GMAPS_KEY || GMAPS_KEY.includes("PASTE_YOUR_GOOGLE_KEY_HERE")) {
       console.warn("Google key not set. Places + Miles will fall back.");
       return resolve();
     }
-
     window.__initGMaps = () => resolve();
 
     const s = document.createElement("script");
@@ -238,7 +239,6 @@ const MILES_LS_KEY = "fet_miles_cache_v1";
 function _makeMilesKey(originStr, destStr) {
   return `${originStr}`.trim().toUpperCase() + "||" + `${destStr}`.trim().toUpperCase();
 }
-
 function loadMilesFromLocalStorage() {
   try {
     const raw = localStorage.getItem(MILES_LS_KEY);
@@ -277,9 +277,8 @@ async function loadRates() {
     buildUI(origins, equipments);
     document.getElementById("dataStatus").textContent = RATES.length.toLocaleString() + " rates loaded";
 
-    // Load Google for Places + Miles
     loadGoogleMapsJS().then(() => {
-      initDestinationAutocomplete();
+      initDestinationCombinedAutocomplete();
     }).catch((e) => {
       console.warn("Google Maps JS load failed:", e);
     });
@@ -346,19 +345,16 @@ function buildUI(origins, equipments) {
       </div>
 
       <div class="section-label">Destination</div>
-      <div class="form-row-3">
-        <div class="field">
-          <label>Destination City</label>
-          <input type="text" id="destCity" placeholder="e.g. ATLANTA">
-        </div>
-        <div class="field">
-          <label>Destination State</label>
-          <input type="text" id="destState" placeholder="e.g. GA">
-        </div>
-        <div class="field" id="destZipField">
-          <label>Destination Zip</label>
-          <input type="text" id="destZip" placeholder="e.g. 30303">
+      <div class="form-row-1">
+        <div class="field" id="destCombinedField">
+          <label>Destination (City, State or Zip)</label>
+          <input type="text" id="destCombined" placeholder="e.g. ATLANTA, GA or 30303">
           <div class="zip-hint" id="zipHint" style="display:none;">Select a ZIP suggestion (or type one).</div>
+
+          <!-- Hidden fields used by the matching + mileage logic -->
+          <input type="hidden" id="destCity">
+          <input type="hidden" id="destState">
+          <input type="hidden" id="destZip">
         </div>
       </div>
 
@@ -388,60 +384,141 @@ function buildUI(origins, equipments) {
   </div>
   `;
 
-  document.getElementById("destZip")?.addEventListener("input", () => hideZipPicker());
+  // Parse manual typing as they type (ZIP or "City, ST")
+  document.getElementById("destCombined")?.addEventListener("input", () => {
+    hideZipPicker();
+    normalizeDestinationFromCombined(false);
+  });
 
+  // Close picker on outside click
   document.addEventListener("click", (e) => {
     const picker = document.getElementById("zipPicker");
     if (!picker) return;
     if (e.target.closest("#zipPicker")) return;
-    if (e.target.closest("#destZip")) return;
+    if (e.target.closest("#destCombined")) return;
     hideZipPicker();
   }, { capture: true });
 
-  window.addEventListener("scroll", () => {
-    // If user scrolls, picker position may become stale—close it.
-    hideZipPicker();
-  }, { passive: true });
+  // Close on scroll/resize
+  window.addEventListener("scroll", () => hideZipPicker(), { passive: true });
+  window.addEventListener("resize", () => hideZipPicker(), { passive: true });
 
-  window.addEventListener("resize", () => {
-    hideZipPicker();
-  }, { passive: true });
+  // Enter submits
+  document.getElementById("destCombined")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitQuote();
+    }
+  });
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   DESTINATION AUTOCOMPLETE + MULTI-ZIP PICKER (floating overlay)
+   DESTINATION: COMBINED INPUT PARSING (manual typing)
 ────────────────────────────────────────────────────────────────────────────── */
-let _destAutocomplete = null;
+function setHiddenDest(city, state, zip) {
+  const c = document.getElementById("destCity");
+  const s = document.getElementById("destState");
+  const z = document.getElementById("destZip");
+  if (c) c.value = (city || "").trim().toUpperCase();
+  if (s) s.value = (state || "").trim().toUpperCase();
+  if (z) z.value = (zip || "").trim().toUpperCase();
+}
 
-function initDestinationAutocomplete() {
+// If user types "30303" or "30303-1234" => ZIP
+// If user types "ATLANTA, GA" or "ATLANTA GA" => city+state
+function normalizeDestinationFromCombined(aggressive) {
+  const el = document.getElementById("destCombined");
+  if (!el) return;
+
+  const raw = (el.value || "").trim();
+
+  // If empty, clear
+  if (!raw) {
+    setHiddenDest("", "", "");
+    return;
+  }
+
+  // ZIP patterns (US 5 or ZIP+4)
+  const zipMatch = raw.match(/\b\d{5}(?:-\d{4})?\b/);
+  if (zipMatch) {
+    setHiddenDest("", "", zipMatch[0]);
+    return;
+  }
+
+  // City/State patterns
+  // Try "CITY, ST"
+  const commaParts = raw.split(",");
+  if (commaParts.length >= 2) {
+    const city = commaParts[0].trim();
+    const st = commaParts[1].trim().split(/\s+/)[0] || "";
+    if (city && st.length >= 2) {
+      setHiddenDest(city, st, "");
+      return;
+    }
+  }
+
+  // Try "CITY ST" (only if aggressive or looks like it ends with 2-letter state)
+  const parts = raw.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const maybeState = parts[parts.length - 1].toUpperCase();
+    if (maybeState.length === 2 && /^[A-Z]{2}$/.test(maybeState)) {
+      const city = parts.slice(0, -1).join(" ");
+      if (city) {
+        setHiddenDest(city, maybeState, "");
+        return;
+      }
+    }
+  }
+
+  // If aggressive and we still can't parse, keep what we have but clear ZIP
+  if (aggressive) setHiddenDest(raw, "", "");
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DESTINATION AUTOCOMPLETE + MULTI-ZIP PICKER (combined field)
+────────────────────────────────────────────────────────────────────────────── */
+let _destCombinedAutocomplete = null;
+
+function initDestinationCombinedAutocomplete() {
   if (!window.google?.maps?.places) return;
 
-  const cityEl = document.getElementById("destCity");
-  const stateEl = document.getElementById("destState");
-  if (!cityEl || !stateEl) return;
+  const combinedEl = document.getElementById("destCombined");
+  if (!combinedEl) return;
 
-  _destAutocomplete = new google.maps.places.Autocomplete(cityEl, {
-    types: ["(cities)"],
+  // Use geocode so typing ZIP/city/address works well
+  _destCombinedAutocomplete = new google.maps.places.Autocomplete(combinedEl, {
+    types: ["geocode"],
     componentRestrictions: { country: ["us"] },
-    fields: ["address_components", "geometry", "name"]
+    fields: ["address_components", "geometry", "name", "formatted_address"]
   });
 
-  _destAutocomplete.addListener("place_changed", async () => {
-    const place = _destAutocomplete.getPlace();
+  _destCombinedAutocomplete.addListener("place_changed", async () => {
+    const place = _destCombinedAutocomplete.getPlace();
     if (!place?.address_components) return;
 
     const getComp = (type, short=false) =>
       place.address_components.find(c => c.types.includes(type))?.[short ? "short_name" : "long_name"] || "";
 
-    const city  = getComp("locality") || place.name || "";
+    const city  = getComp("locality") || getComp("postal_town") || getComp("sublocality") || place.name || "";
     const state = getComp("administrative_area_level_1", true) || "";
+    const zip   = getComp("postal_code") || "";
 
-    cityEl.value = city.toUpperCase();
-    if (state) stateEl.value = state.toUpperCase();
+    // Save hidden values
+    setHiddenDest(city, state, zip);
 
-    const zips = await suggestZipsForCity(place);
+    // Update display text nicely
+    if (zip) {
+      combinedEl.value = `${(city || "").toUpperCase()}, ${(state || "").toUpperCase()} ${zip}`.trim().replace(/^, /, "");
+      hideZipPicker();
+      return;
+    }
 
-    showZipPicker(zips, cityEl.value.trim(), stateEl.value.trim());
+    // City selected but no ZIP returned: show picker of possible ZIPs
+    if (city && state) {
+      combinedEl.value = `${city.toUpperCase()}, ${state.toUpperCase()}`;
+      const zips = await suggestZipsForCity(place);
+      showZipPicker(zips, city.toUpperCase(), state.toUpperCase(), combinedEl);
+    }
   });
 }
 
@@ -488,15 +565,16 @@ function hideZipPicker() {
   if (hint) hint.style.display = "none";
 }
 
-function showZipPicker(zips, city, state) {
+function showZipPicker(zips, city, state, anchorEl) {
   hideZipPicker();
   if (!zips || zips.length === 0) return;
 
-  const zipInput = document.getElementById("destZip");
   const hint = document.getElementById("zipHint");
-  if (!zipInput) return;
-
   if (hint) hint.style.display = "block";
+
+  const zipHidden = document.getElementById("destZip");
+  const combined = document.getElementById("destCombined");
+  if (!zipHidden || !combined) return;
 
   const items = zips.map(zip => ({ zip, label: `${city}, ${state}, ${zip}, USA` }));
 
@@ -513,20 +591,20 @@ function showZipPicker(zips, city, state) {
     const row = e.target.closest(".zip-item");
     if (!row) return;
     const zip = row.getAttribute("data-zip") || "";
-    zipInput.value = zip;
+    zipHidden.value = zip;
+    combined.value = `${city}, ${state} ${zip}`;
     hideZipPicker();
-    zipInput.focus();
+    combined.focus();
   });
 
   document.body.appendChild(picker);
 
-  const r = zipInput.getBoundingClientRect();
+  const r = (anchorEl || combined).getBoundingClientRect();
   const padding = 10;
   const spaceBelow = window.innerHeight - r.bottom - padding;
   const spaceAbove = r.top - padding;
 
   const openDown = spaceBelow >= 260 || spaceBelow >= spaceAbove;
-
   const maxHeight = Math.max(160, Math.min(560, openDown ? spaceBelow : spaceAbove));
   picker.style.maxHeight = `${maxHeight}px`;
 
@@ -564,10 +642,15 @@ function onOriginChange() {
    SUBMIT
 ────────────────────────────────────────────────────────────────────────────── */
 async function submitQuote() {
+  // Normalize manual typing (aggressive) right before submit
+  normalizeDestinationFromCombined(true);
+
   const originFac = document.getElementById("originFacility").value.trim().toUpperCase();
-  const destCity  = document.getElementById("destCity").value.trim().toUpperCase();
-  const destState = document.getElementById("destState").value.trim().toUpperCase();
-  const destZip   = document.getElementById("destZip").value.trim().toUpperCase();
+
+  const destCity  = (document.getElementById("destCity")?.value || "").trim().toUpperCase();
+  const destState = (document.getElementById("destState")?.value || "").trim().toUpperCase();
+  const destZip   = (document.getElementById("destZip")?.value || "").trim().toUpperCase();
+
   const equipment = document.getElementById("equipment").value;
   const banner    = document.getElementById("errorBanner");
 
@@ -622,14 +705,13 @@ async function getMileageCached(originZip, originFac, destZip, destCity, destSta
 }
 
 async function getMileageGoogle(originStr, destStr) {
-  if (!GMAPS_KEY || GMAPS_KEY.includes("AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg")) return null;
+  if (!GMAPS_KEY || GMAPS_KEY.includes("PASTE_YOUR_GOOGLE_KEY_HERE")) return null;
 
   try {
     await loadGoogleMapsJS();
     if (!window.google?.maps?.DistanceMatrixService) return null;
 
     const service = new google.maps.DistanceMatrixService();
-
     const response = await new Promise((resolve, reject) => {
       service.getDistanceMatrix(
         {
@@ -870,17 +952,25 @@ function fp(val)   { return (val >= 0 ? "+" : "") + val.toFixed(2) + "%"; }
 function dc(val)   { return Math.abs(val) < 0.01 ? "mono diff-zero" : val > 0 ? "mono diff-positive" : "mono diff-negative"; }
 
 function clearForm() {
-  ["originFacility","originCity","originState","originZip","destCity","destState","destZip"].forEach(id => {
+  ["originFacility","originCity","originState","originZip"].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = "";
   });
+
+  const combined = document.getElementById("destCombined");
+  if (combined) combined.value = "";
+  setHiddenDest("", "", "");
+
   hideZipPicker();
+
   const eq = document.getElementById("equipment"); if (eq) eq.value = "";
   const pa = document.getElementById("pctAdj"); if (pa) pa.value = 0;
+
   document.getElementById("errorBanner")?.classList.remove("show");
   const mb = document.getElementById("matchBadge"); if (mb) mb.innerHTML = "";
   const rb = document.getElementById("rateTypeBadge"); if (rb) rb.textContent = "";
   const rc = document.getElementById("resultsContent");
   if (rc) rc.innerHTML = '<div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>';
+
   currentMatch = null;
   window._matchData = null;
 }
