@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Freight Estimate Tool</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
   :root {
     --bg: #f0f2f5;
@@ -29,6 +30,7 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
   .header {
     background: var(--header-bg);
     color: var(--header-text);
@@ -62,10 +64,12 @@
     border-radius: 4px; display: none;
   }
   .error-banner.show { display: block; }
+
   .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
   .form-row-5 { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
   .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 20px; }
-  .field { display: flex; flex-direction: column; gap: 5px; }
+
+  .field { display: flex; flex-direction: column; gap: 5px; position: relative; }
   .field label { font-size: 11px; font-weight: 600; color: var(--label); text-transform: uppercase; letter-spacing: 0.06em; }
   .field input, .field select {
     background: var(--input-bg); border: 1.5px solid var(--border); border-radius: 7px;
@@ -77,13 +81,17 @@
   }
   .field input::placeholder { color: #94a3b8; }
   .field input[readonly] { background: #f1f5f9; color: var(--text-muted); cursor: default; }
+
   .section-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+
   .btn-row { display: flex; gap: 10px; align-items: center; }
   .btn { padding: 9px 22px; border-radius: 8px; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
   .btn-primary { background: var(--accent); color: white; }
   .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,86,219,0.3); }
+  .btn-primary:disabled { opacity: 0.75; cursor: not-allowed; transform: none; box-shadow: none; }
   .btn-secondary { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); }
   .btn-secondary:hover { background: var(--bg); color: var(--text); }
+
   .results-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 14px 24px; border-bottom: 1.5px solid var(--border);
@@ -104,6 +112,7 @@
   }
   .adj-input:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(147,197,253,0.2); }
   .adj-hint { font-size: 12px; color: var(--text-muted); font-style: italic; }
+
   table { width: 100%; border-collapse: collapse; }
   thead tr { border-bottom: 2px solid var(--border); }
   thead th { padding: 10px 24px; text-align: right; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
@@ -128,10 +137,42 @@
   .match-none { background: #fee2e2; color: #991b1b; }
   .currency-badge { font-size: 10px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 1px 6px; border-radius: 4px; margin-left: 4px; vertical-align: middle; }
   .data-status { font-size: 11px; color: var(--text-muted); margin-left: auto; font-style: italic; }
+
+  /* ZIP picker dropdown */
+  .zip-picker {
+    margin-top: 6px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: white;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    overflow: hidden;
+    max-height: 240px;
+    overflow-y: auto;
+    position: absolute;
+    top: calc(100% + 28px);
+    left: 0;
+    right: 0;
+    z-index: 9999;
+  }
+  .zip-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .zip-item:last-child { border-bottom: none; }
+  .zip-item:hover { background: #f1f5fb; }
+  .zip-item strong { font-weight: 700; }
+  .zip-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    font-style: italic;
+  }
 </style>
 </head>
-<body>
 
+<body>
 <div class="header">
   <div class="header-icon">🚚</div>
   Freight Estimate Tool
@@ -149,13 +190,8 @@
 <script>
 /* ─────────────────────────────────────────────────────────────────────────────
    CONFIG
-   IMPORTANT: Do NOT use the key you pasted previously (assume compromised).
-   Rotate/revoke it in Google Cloud, create a NEW key, and lock it down:
-     - Application restriction: HTTP referrers
-       * https://drw00d.github.io/*
-     - API restriction: Maps JavaScript API (+ Distance Matrix API if required)
 ────────────────────────────────────────────────────────────────────────────── */
-const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg";
+const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg"; // restrict this key to your GitHub Pages referrer & required APIs
 
 /* ─────────────────────────────────────────────────────────────────────────────
    STATE
@@ -165,7 +201,7 @@ let ORIGIN_ZIPS = {};
 let currentMatch = null;
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   GOOGLE MAPS LOADER (no CORS issues; uses DistanceMatrixService)
+   GOOGLE MAPS JS LOADER (with Places library)
 ────────────────────────────────────────────────────────────────────────────── */
 let _gmapsPromise = null;
 
@@ -174,8 +210,8 @@ function loadGoogleMapsJS() {
   if (_gmapsPromise) return _gmapsPromise;
 
   _gmapsPromise = new Promise((resolve, reject) => {
-    if (!GMAPS_KEY || GMAPS_KEY.includes("PUT_YOUR_RESTRICTED_KEY_HERE")) {
-      console.warn("Google Maps key not set. Miles will fall back to estimate.");
+    if (!GMAPS_KEY || GMAPS_KEY.includes("PASTE_YOUR_GOOGLE_KEY_HERE")) {
+      console.warn("Google key not set. Places + Miles will fall back.");
       return resolve();
     }
 
@@ -184,7 +220,7 @@ function loadGoogleMapsJS() {
     const s = document.createElement("script");
     s.async = true;
     s.defer = true;
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&callback=__initGMaps`;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&libraries=places&callback=__initGMaps`;
     s.onerror = (e) => reject(e);
     document.head.appendChild(s);
   });
@@ -193,9 +229,7 @@ function loadGoogleMapsJS() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   MILEAGE CACHE (reduces API calls/cost)
-   - Memory Map for current session
-   - localStorage for persistence (simple & effective)
+   MILES CACHE
 ────────────────────────────────────────────────────────────────────────────── */
 const milesCache = new Map();
 const MILES_LS_KEY = "fet_miles_cache_v1";
@@ -217,7 +251,6 @@ function loadMilesFromLocalStorage() {
 
 function saveMilesToLocalStorage() {
   try {
-    // cap to avoid unbounded growth
     const MAX_ENTRIES = 1500;
     const entries = Array.from(milesCache.entries());
     const trimmed = entries.slice(Math.max(0, entries.length - MAX_ENTRIES));
@@ -236,12 +269,23 @@ async function loadRates() {
     const res = await fetch("rates.json?_=" + Date.now()); // cache-bust
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
+
     RATES = data.rates || [];
     ORIGIN_ZIPS = data.origin_zips || {};
     const origins = data.origins || [];
     const equipments = data.equipments || [];
+
     buildUI(origins, equipments);
+
     document.getElementById("dataStatus").textContent = RATES.length.toLocaleString() + " rates loaded";
+
+    // Load Google JS (Places + Miles). If it fails, tool still works with fallback miles.
+    loadGoogleMapsJS().then(() => {
+      initDestinationAutocomplete();
+    }).catch((e) => {
+      console.warn("Google Maps JS load failed:", e);
+    });
+
   } catch (e) {
     document.getElementById("appContainer").innerHTML =
       '<div class="card"><div class="card-body"><div class="load-error">' +
@@ -308,15 +352,16 @@ function buildUI(origins, equipments) {
       <div class="form-row-3">
         <div class="field">
           <label>Destination City</label>
-          <input type="text" id="destCity" placeholder="e.g. LANCASTER">
+          <input type="text" id="destCity" placeholder="e.g. ATLANTA">
         </div>
         <div class="field">
           <label>Destination State</label>
-          <input type="text" id="destState" placeholder="e.g. OH">
+          <input type="text" id="destState" placeholder="e.g. GA">
         </div>
-        <div class="field">
+        <div class="field" id="destZipField">
           <label>Destination Zip</label>
-          <input type="text" id="destZip" placeholder="e.g. 45883">
+          <input type="text" id="destZip" placeholder="e.g. 30303">
+          <div class="zip-hint" id="zipHint" style="display:none;">Select a ZIP suggestion (or type one).</div>
         </div>
       </div>
 
@@ -346,6 +391,148 @@ function buildUI(origins, equipments) {
     </div>
   </div>
   `;
+
+  // Hide ZIP picker when typing a manual ZIP
+  document.getElementById("destZip")?.addEventListener("input", () => {
+    hideZipPicker();
+  });
+
+  // Hide ZIP picker if clicking outside
+  document.addEventListener("click", (e) => {
+    const picker = document.getElementById("zipPicker");
+    const zipField = document.getElementById("destZipField");
+    if (!picker || !zipField) return;
+    if (!zipField.contains(e.target)) hideZipPicker();
+  }, { capture: true });
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DESTINATION AUTOCOMPLETE + MULTI-ZIP PICKER
+────────────────────────────────────────────────────────────────────────────── */
+let _destAutocomplete = null;
+
+function initDestinationAutocomplete() {
+  if (!window.google?.maps?.places) return;
+
+  const cityEl = document.getElementById("destCity");
+  const stateEl = document.getElementById("destState");
+
+  if (!cityEl || !stateEl) return;
+
+  // City autocomplete (returns locality)
+  _destAutocomplete = new google.maps.places.Autocomplete(cityEl, {
+    types: ["(cities)"],
+    componentRestrictions: { country: ["us"] }, // change to ["us","ca"] if you want CA too
+    fields: ["address_components", "geometry", "name"]
+  });
+
+  _destAutocomplete.addListener("place_changed", async () => {
+    const place = _destAutocomplete.getPlace();
+    if (!place?.address_components) return;
+
+    const getComp = (type, short=false) =>
+      place.address_components.find(c => c.types.includes(type))?.[short ? "short_name" : "long_name"] || "";
+
+    const city  = getComp("locality") || place.name || "";
+    const state = getComp("administrative_area_level_1", true) || "";
+
+    cityEl.value = city.toUpperCase();
+    if (state) stateEl.value = state.toUpperCase();
+
+    // Build multiple ZIP suggestions after a city is selected
+    const zips = await suggestZipsForCity(place);
+    const labelCity = cityEl.value.trim();
+    const labelState = stateEl.value.trim();
+
+    showZipPicker(zips, labelCity, labelState);
+  });
+}
+
+async function suggestZipsForCity(place) {
+  // We sample a few nearby points and reverse-geocode to collect multiple postal codes.
+  if (!window.google?.maps?.Geocoder) return [];
+  if (!place?.geometry?.location) return [];
+
+  const lat = place.geometry.location.lat();
+  const lng = place.geometry.location.lng();
+
+  const points = [
+    {lat, lng},
+    {lat: lat + 0.06, lng},
+    {lat: lat - 0.06, lng},
+    {lat, lng: lng + 0.06},
+    {lat, lng: lng - 0.06},
+    {lat: lat + 0.04, lng: lng + 0.04},
+    {lat: lat - 0.04, lng: lng - 0.04},
+  ];
+
+  const geocoder = new google.maps.Geocoder();
+  const found = new Set();
+
+  for (const p of points) {
+    const results = await new Promise((resolve) => {
+      geocoder.geocode({ location: p }, (res, status) => {
+        if (status === "OK") resolve(res || []);
+        else resolve([]);
+      });
+    });
+
+    for (const r of results) {
+      const pc = r.address_components?.find(c => c.types.includes("postal_code"))?.long_name;
+      if (pc) found.add(pc);
+    }
+  }
+
+  // Return up to 15 unique zips
+  return Array.from(found).slice(0, 15);
+}
+
+function hideZipPicker() {
+  const picker = document.getElementById("zipPicker");
+  if (picker) picker.remove();
+  const hint = document.getElementById("zipHint");
+  if (hint) hint.style.display = "none";
+}
+
+function showZipPicker(zips, city, state) {
+  hideZipPicker();
+
+  if (!zips || zips.length === 0) return;
+
+  const zipField = document.getElementById("destZipField");
+  const zipInput = document.getElementById("destZip");
+  const hint = document.getElementById("zipHint");
+
+  if (!zipField || !zipInput) return;
+
+  if (hint) hint.style.display = "block";
+
+  const picker = document.createElement("div");
+  picker.id = "zipPicker";
+  picker.className = "zip-picker";
+
+  // Build items like the screenshot: "ATLANTA, GA, 30303, USA"
+  const items = zips.map(zip => {
+    const label = `${city}, ${state}, ${zip}, USA`;
+    return { zip, label };
+  });
+
+  picker.innerHTML = items.map(it => `
+    <div class="zip-item" data-zip="${it.zip}">
+      <strong>${it.label}</strong>
+    </div>
+  `).join("");
+
+  picker.addEventListener("click", (e) => {
+    const row = e.target.closest(".zip-item");
+    if (!row) return;
+    const zip = row.getAttribute("data-zip") || "";
+    zipInput.value = zip;
+    hideZipPicker();
+    zipInput.focus();
+  });
+
+  zipField.appendChild(picker);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -382,14 +569,16 @@ async function submitQuote() {
   if (!hasOrigin || !hasDest) { banner.classList.add("show"); return; }
   banner.classList.remove("show");
 
-  // Show loading state on Submit button
+  hideZipPicker();
+
   const btn = document.querySelector(".btn-primary");
   const origBtnText = btn.textContent;
   btn.textContent = "Calculating…";
   btn.disabled = true;
 
-  // Get mileage from Google Distance Matrix via JS API (with caching)
   const originZip = document.getElementById("originZip").value.trim();
+
+  // Google miles (cached). If it fails, we fall back later.
   const miles = await getMileageCached(originZip, originFac, destZip, destCity, destState);
 
   btn.textContent = origBtnText;
@@ -400,14 +589,13 @@ async function submitQuote() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   GOOGLE MILES (DistanceMatrixService via Maps JS API)
+   MILEAGE (DistanceMatrixService)
 ────────────────────────────────────────────────────────────────────────────── */
 function buildOriginString(originZip, originFac) {
   if (originZip) return originZip;
   const parts = originFac.split(",");
   return `${(parts[0] || "").trim()} ${(parts[1] || "").trim()}`.trim(); // CITY STATE
 }
-
 function buildDestString(destZip, destCity, destState) {
   return destZip || `${destCity} ${destState}`.trim();
 }
@@ -428,8 +616,7 @@ async function getMileageCached(originZip, originFac, destZip, destCity, destSta
 }
 
 async function getMileageGoogle(originStr, destStr) {
-  // If no key set, skip gracefully
-  if (!GMAPS_KEY || GMAPS_KEY.includes("PUT_YOUR_RESTRICTED_KEY_HERE")) return null;
+  if (!GMAPS_KEY || GMAPS_KEY.includes("PASTE_YOUR_GOOGLE_KEY_HERE")) return null;
 
   try {
     await loadGoogleMapsJS();
@@ -457,7 +644,6 @@ async function getMileageGoogle(originStr, destStr) {
     const el = response?.rows?.[0]?.elements?.[0];
     if (!el || el.status !== "OK") return null;
 
-    // distance.value is meters
     const meters = el.distance.value;
     return Math.round(meters / 1609.34);
   } catch (e) {
@@ -477,7 +663,7 @@ function findRate(originFac, destCity, destState, destZip, equipment) {
 
   for (const r of RATES) {
     const [uom, rate, flat, currency, minCharge, bandMin, bandMax, equip,
-           origLoc, origStateField, origCountry, destLoc, destStateField, destPostal, destCountry] = r;
+      origLoc, origStateField, origCountry, destLoc, destStateField, destPostal, destCountry] = r;
 
     if (equipment && equip && equipment !== equip) continue;
 
@@ -526,6 +712,7 @@ function findRate(originFac, destCity, destState, destZip, equipment) {
       best = { uom, rate, flat, currency, minCharge, equip, origLoc, destLoc, destPostal, score: totalScore };
     }
   }
+
   return best;
 }
 
@@ -534,6 +721,7 @@ function findRate(originFac, destCity, destState, destZip, equipment) {
 ────────────────────────────────────────────────────────────────────────────── */
 function displayResults(match, miles) {
   currentMatch = match;
+
   const badge         = document.getElementById("matchBadge");
   const rateTypeBadge = document.getElementById("rateTypeBadge");
   const content       = document.getElementById("resultsContent");
@@ -559,10 +747,9 @@ function displayResults(match, miles) {
   const gpRate    = isMI ? (match.rate || 0) : (match.flat || 0);
   const minCharge = match.minCharge || 0;
 
-  // Use real miles if available, otherwise fall back to 500 estimate
-  const milesActual  = (isMI && miles != null) ? miles : (isMI ? 500 : 0);
-  const milesLabel   = (isMI && miles != null) ? miles : (isMI ? "~500 (est.)" : "—");
-  const milesFailed  = isMI && miles == null;
+  const milesActual = (isMI && miles != null) ? miles : (isMI ? 500 : 0);
+  const milesLabel  = (isMI && miles != null) ? miles : (isMI ? "~500 (est.)" : "—");
+  const milesFailed = isMI && miles == null;
 
   const gpAvg  = isMI ? gpRate * milesActual : gpRate;
   const gpFuel = isMI ? gpRate * milesActual * 0.25 : gpRate * 0.18;
@@ -601,14 +788,14 @@ function displayResults(match, miles) {
       <tr>
         <td>Fuel Per Load</td>
         <td class="mono" id="gpFuelCell">${fmt(gpFuel, currency)}<span class="currency-badge">${currency}</span></td>
-        <td class="mono" id="adjFuelCell">${fmt(0, currency)}</td>
-        <td class="mono diff-zero" id="diffFuel">0.00%</td>
+        <td class="mono" id="adjFuelCell">${fmt(gpFuel, currency)}</td>
+        <td class="mono diff-zero" id="diffFuel">—</td>
       </tr>
       <tr>
         <td>Avg Rate Per Load</td>
         <td class="mono" id="gpAvgCell">${fmt(gpAvg, currency)}<span class="currency-badge">${currency}</span></td>
         <td class="mono" id="adjAvgCell">${fmt(0, currency)}</td>
-        <td class="mono diff-zero" id="diffAvg">0.00%</td>
+        <td class="mono diff-zero" id="diffAvg">—</td>
       </tr>
     </tbody>
     <tfoot>
@@ -616,7 +803,7 @@ function displayResults(match, miles) {
         <td>Total Freight Per Load</td>
         <td class="mono" id="totalGP">${fmt(0, currency)}</td>
         <td class="mono" id="totalAdj">${fmt(0, currency)}</td>
-        <td class="mono diff-zero" id="totalDiff">0.00%</td>
+        <td class="mono diff-zero" id="totalDiff">—</td>
       </tr>
     </tfoot>
   </table>`;
@@ -626,7 +813,7 @@ function displayResults(match, miles) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   RECALC
+   RECALC (Fuel DOES NOT CHANGE — only RPM + Avg change)
 ────────────────────────────────────────────────────────────────────────────── */
 function recalc() {
   if (!currentMatch || !window._matchData) return;
@@ -635,13 +822,13 @@ function recalc() {
   const adjPct = parseFloat(document.getElementById("pctAdj")?.value) || 0;
   const mult   = 1 + adjPct / 100;
 
-  // ✅ Only adjust RPM + Avg. Fuel stays GP.
+  // Only adjust RPM and Avg; Fuel stays GP
   const adjAvg  = gpAvg * mult;
-  const adjFuel = gpFuel;                 // <-- fuel NOT adjusted
+  const adjFuel = gpFuel;
   const adjRPM  = isMI ? gpRate * mult : 0;
 
   const gpTotal  = Math.max(gpAvg + gpFuel, minCharge);
-  const adjTotal = Math.max(adjAvg + gpFuel, minCharge); // <-- use GP fuel here too
+  const adjTotal = Math.max(adjAvg + gpFuel, minCharge);
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = val; };
 
@@ -650,15 +837,14 @@ function recalc() {
     set("diffRPM", `<span class="${dc(pct(adjRPM, gpRate))}">${fp(pct(adjRPM, gpRate))}</span>`);
   }
 
-  // Fuel column stays the same
   set("adjFuelCell", fmt(adjFuel, currency));
-  set("diffFuel", `<span class="mono diff-zero">0.00%</span>`);
+  set("diffFuel", `<span class="mono diff-zero">—</span>`);
 
-  set("adjAvgCell",  fmt(adjAvg, currency));
-  set("totalGP",  `${fmt(gpTotal,  currency)}<span class="currency-badge">${currency}</span>`);
+  set("adjAvgCell", fmt(adjAvg, currency));
+  set("diffAvg", `<span class="${dc(pct(adjAvg, gpAvg))}">${fp(pct(adjAvg, gpAvg))}</span>`);
+
+  set("totalGP", `${fmt(gpTotal, currency)}<span class="currency-badge">${currency}</span>`);
   set("totalAdj", `${fmt(adjTotal, currency)}<span class="currency-badge">${currency}</span>`);
-
-  set("diffAvg",   `<span class="${dc(pct(adjAvg, gpAvg))}">${fp(pct(adjAvg, gpAvg))}</span>`);
   set("totalDiff", `<span class="${dc(pct(adjTotal, gpTotal))}">${fp(pct(adjTotal, gpTotal))}</span>`);
 }
 
@@ -682,8 +868,9 @@ function clearForm() {
   ["originFacility","originCity","originState","originZip","destCity","destState","destZip"].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = "";
   });
+  hideZipPicker();
   const eq = document.getElementById("equipment"); if (eq) eq.value = "";
-  const pa = document.getElementById("pctAdj");    if (pa) pa.value = 0;
+  const pa = document.getElementById("pctAdj"); if (pa) pa.value = 0;
   document.getElementById("errorBanner")?.classList.remove("show");
   const mb = document.getElementById("matchBadge"); if (mb) mb.innerHTML = "";
   const rb = document.getElementById("rateTypeBadge"); if (rb) rb.textContent = "";
@@ -698,6 +885,5 @@ function clearForm() {
 ────────────────────────────────────────────────────────────────────────────── */
 loadRates();
 </script>
-
 </body>
 </html>
