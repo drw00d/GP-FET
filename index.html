@@ -211,18 +211,27 @@ function loadGoogleMapsJS() {
   if (_gmapsPromise) return _gmapsPromise;
 
   _gmapsPromise = new Promise((resolve, reject) => {
-    if (!GMAPS_KEY || GMAPS_KEY.includes("AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg")) {
-      console.warn("Google key not set. Places + Miles will fall back.");
+    const statusEl = document.getElementById("dataStatus");
+
+    if (!GMAPS_KEY || GMAPS_KEY.includes("PASTE_YOUR_GOOGLE_KEY_HERE")) {
+      console.warn("Google key not set. Places + Miles disabled.");
+      if (statusEl) statusEl.textContent = "Rates loaded (Google OFF)";
       return resolve();
     }
 
-    window.__initGMaps = () => resolve();
+    window.__initGMaps = () => {
+      if (statusEl) statusEl.textContent = "Rates loaded (Google OK)";
+      resolve();
+    };
 
     const s = document.createElement("script");
     s.async = true;
     s.defer = true;
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&libraries=places&callback=__initGMaps`;
-    s.onerror = (e) => reject(e);
+    s.onerror = () => {
+      if (statusEl) statusEl.textContent = "Rates loaded (Google FAILED)";
+      reject(new Error("Google Maps JS failed to load"));
+    };
     document.head.appendChild(s);
   });
 
