@@ -422,7 +422,7 @@ function initDestinationAutocomplete() {
   // City autocomplete (returns locality)
   _destAutocomplete = new google.maps.places.Autocomplete(cityEl, {
     types: ["(cities)"],
-    componentRestrictions: { country: ["us"] }, // change to ["us","ca"] if you want CA too
+    componentRestrictions: { country: ["us","ca"] }, // change to ["us","ca"] if you want CA too
     fields: ["address_components", "geometry", "name"]
   });
 
