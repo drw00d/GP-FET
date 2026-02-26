@@ -53,6 +53,7 @@
   }
 
   .container { max-width: 860px; margin: 24px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
+
   .card { background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
   .card-body { padding: 20px 24px; }
 
@@ -169,7 +170,6 @@
     margin-top: 6px;
     font-style: italic;
   }
-  .pac-container { z-index: 999999 !important; }
 </style>
 </head>
 
@@ -192,7 +192,7 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    CONFIG
 ────────────────────────────────────────────────────────────────────────────── */
-const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg"; // <-- paste your key
+const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg"; // Restrict by referrer + API restrictions in Google Cloud
 
 /* ─────────────────────────────────────────────────────────────────────────────
    STATE
@@ -215,6 +215,7 @@ function loadGoogleMapsJS() {
       console.warn("Google key not set. Places + Miles will fall back.");
       return resolve();
     }
+
     window.__initGMaps = () => resolve();
 
     const s = document.createElement("script");
@@ -237,6 +238,7 @@ const MILES_LS_KEY = "fet_miles_cache_v1";
 function _makeMilesKey(originStr, destStr) {
   return `${originStr}`.trim().toUpperCase() + "||" + `${destStr}`.trim().toUpperCase();
 }
+
 function loadMilesFromLocalStorage() {
   try {
     const raw = localStorage.getItem(MILES_LS_KEY);
@@ -275,7 +277,10 @@ async function loadRates() {
     buildUI(origins, equipments);
     document.getElementById("dataStatus").textContent = RATES.length.toLocaleString() + " rates loaded";
 
-    loadGoogleMapsJS().then(() => initDestinationAutocomplete()).catch((e) => {
+    // Load Google for Places + Miles
+    loadGoogleMapsJS().then(() => {
+      initDestinationAutocomplete();
+    }).catch((e) => {
       console.warn("Google Maps JS load failed:", e);
     });
 
@@ -393,8 +398,14 @@ function buildUI(origins, equipments) {
     hideZipPicker();
   }, { capture: true });
 
-  window.addEventListener("scroll", () => hideZipPicker(), { passive: true });
-  window.addEventListener("resize", () => hideZipPicker(), { passive: true });
+  window.addEventListener("scroll", () => {
+    // If user scrolls, picker position may become stale—close it.
+    hideZipPicker();
+  }, { passive: true });
+
+  window.addEventListener("resize", () => {
+    hideZipPicker();
+  }, { passive: true });
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -406,7 +417,8 @@ function initDestinationAutocomplete() {
   if (!window.google?.maps?.places) return;
 
   const cityEl = document.getElementById("destCity");
-  if (!cityEl) return;
+  const stateEl = document.getElementById("destState");
+  if (!cityEl || !stateEl) return;
 
   _destAutocomplete = new google.maps.places.Autocomplete(cityEl, {
     types: ["(cities)"],
@@ -425,11 +437,11 @@ function initDestinationAutocomplete() {
     const state = getComp("administrative_area_level_1", true) || "";
 
     cityEl.value = city.toUpperCase();
-    const stateEl = document.getElementById("destState");
-    if (stateEl && state) stateEl.value = state.toUpperCase();
+    if (state) stateEl.value = state.toUpperCase();
 
     const zips = await suggestZipsForCity(place);
-    showZipPicker(zips, cityEl.value.trim(), (stateEl?.value || "").trim(), document.getElementById("destZip"));
+
+    showZipPicker(zips, cityEl.value.trim(), stateEl.value.trim());
   });
 }
 
@@ -476,15 +488,15 @@ function hideZipPicker() {
   if (hint) hint.style.display = "none";
 }
 
-function showZipPicker(zips, city, state, anchorEl) {
+function showZipPicker(zips, city, state) {
   hideZipPicker();
   if (!zips || zips.length === 0) return;
 
-  const hint = document.getElementById("zipHint");
-  if (hint) hint.style.display = "block";
-
   const zipInput = document.getElementById("destZip");
+  const hint = document.getElementById("zipHint");
   if (!zipInput) return;
+
+  if (hint) hint.style.display = "block";
 
   const items = zips.map(zip => ({ zip, label: `${city}, ${state}, ${zip}, USA` }));
 
@@ -508,12 +520,13 @@ function showZipPicker(zips, city, state, anchorEl) {
 
   document.body.appendChild(picker);
 
-  const r = (anchorEl || zipInput).getBoundingClientRect();
+  const r = zipInput.getBoundingClientRect();
   const padding = 10;
   const spaceBelow = window.innerHeight - r.bottom - padding;
   const spaceAbove = r.top - padding;
 
   const openDown = spaceBelow >= 260 || spaceBelow >= spaceAbove;
+
   const maxHeight = Math.max(160, Math.min(560, openDown ? spaceBelow : spaceAbove));
   picker.style.maxHeight = `${maxHeight}px`;
 
@@ -616,6 +629,7 @@ async function getMileageGoogle(originStr, destStr) {
     if (!window.google?.maps?.DistanceMatrixService) return null;
 
     const service = new google.maps.DistanceMatrixService();
+
     const response = await new Promise((resolve, reject) => {
       service.getDistanceMatrix(
         {
