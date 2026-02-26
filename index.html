@@ -635,12 +635,13 @@ function recalc() {
   const adjPct = parseFloat(document.getElementById("pctAdj")?.value) || 0;
   const mult   = 1 + adjPct / 100;
 
-  const adjAvg  = gpAvg  * mult;
-  const adjFuel = gpFuel * mult;
+  // ✅ Only adjust RPM + Avg. Fuel stays GP.
+  const adjAvg  = gpAvg * mult;
+  const adjFuel = gpFuel;                 // <-- fuel NOT adjusted
   const adjRPM  = isMI ? gpRate * mult : 0;
 
   const gpTotal  = Math.max(gpAvg + gpFuel, minCharge);
-  const adjTotal = Math.max(adjAvg + adjFuel, minCharge);
+  const adjTotal = Math.max(adjAvg + gpFuel, minCharge); // <-- use GP fuel here too
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = val; };
 
@@ -649,13 +650,15 @@ function recalc() {
     set("diffRPM", `<span class="${dc(pct(adjRPM, gpRate))}">${fp(pct(adjRPM, gpRate))}</span>`);
   }
 
+  // Fuel column stays the same
   set("adjFuelCell", fmt(adjFuel, currency));
-  set("adjAvgCell",  fmt(adjAvg,  currency));
+  set("diffFuel", `<span class="mono diff-zero">0.00%</span>`);
+
+  set("adjAvgCell",  fmt(adjAvg, currency));
   set("totalGP",  `${fmt(gpTotal,  currency)}<span class="currency-badge">${currency}</span>`);
   set("totalAdj", `${fmt(adjTotal, currency)}<span class="currency-badge">${currency}</span>`);
 
-  set("diffFuel",  `<span class="${dc(pct(adjFuel,  gpFuel))}">${fp(pct(adjFuel,  gpFuel))}</span>`);
-  set("diffAvg",   `<span class="${dc(pct(adjAvg,   gpAvg))}">${fp(pct(adjAvg,   gpAvg))}</span>`);
+  set("diffAvg",   `<span class="${dc(pct(adjAvg, gpAvg))}">${fp(pct(adjAvg, gpAvg))}</span>`);
   set("totalDiff", `<span class="${dc(pct(adjTotal, gpTotal))}">${fp(pct(adjTotal, gpTotal))}</span>`);
 }
 
