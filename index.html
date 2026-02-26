@@ -28,7 +28,6 @@
     --negative: #dc2626;
     --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
@@ -53,7 +52,6 @@
   }
 
   .container { max-width: 860px; margin: 24px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
-
   .card { background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
   .card-body { padding: 20px 24px; }
 
@@ -128,23 +126,28 @@
   tbody tr:hover { background: #f1f5fb; }
   tbody td { padding: 13px 24px; font-size: 13.5px; text-align: right; color: var(--text); }
   tbody td:first-child { text-align: left; font-weight: 500; }
+
   .mono { font-family: 'DM Mono', monospace; }
   .diff-positive { color: var(--positive); font-weight: 600; }
   .diff-negative { color: var(--negative); font-weight: 600; }
   .diff-zero { color: var(--text-muted); }
+
   tfoot .total-row td {
     background: var(--total-bg) !important; border-top: 2px solid var(--total-border);
     font-weight: 700; font-size: 14px; padding: 14px 24px;
   }
+
   .no-results { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 14px; }
+
   .match-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 20px; margin-left: 10px; }
   .match-exact { background: #dcfce7; color: #15803d; }
   .match-partial { background: #fef3c7; color: #92400e; }
   .match-none { background: #fee2e2; color: #991b1b; }
+
   .currency-badge { font-size: 10px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 1px 6px; border-radius: 4px; margin-left: 4px; vertical-align: middle; }
   .data-status { font-size: 11px; color: var(--text-muted); margin-left: auto; font-style: italic; }
 
-  /* ZIP picker (floating overlay / portal) */
+  /* ZIP picker (portal overlay) */
   .zip-picker {
     position: fixed;
     background: #fff;
@@ -154,7 +157,7 @@
     overflow: auto;
     z-index: 999999;
     width: 320px;
-    max-height: 420px; /* dynamically overridden */
+    max-height: 420px; /* overridden dynamically */
   }
   .zip-item {
     padding: 10px 12px;
@@ -183,7 +186,7 @@
 <div class="container" id="appContainer">
   <div class="card">
     <div class="card-body">
-      <div class="loading-overlay" id="loadingMsg">Loading rate data, please wait…</div>
+      <div class="loading-overlay">Loading rate data, please wait…</div>
     </div>
   </div>
 </div>
@@ -201,12 +204,16 @@ let RATES = [];
 let ORIGIN_ZIPS = {};
 let currentMatch = null;
 
-// ZIP suggestion cache (city+state -> [zips]) + last selected city/state zips
+/* ZIP suggestions cache */
 const zipSuggestCache = new Map();
 const ZIP_LS_KEY = "fet_zip_suggest_cache_v1";
 let LAST_DEST_CITY = "";
 let LAST_DEST_STATE = "";
 let LAST_DEST_ZIPS = [];
+
+/* Mileage cache */
+const milesCache = new Map();
+const MILES_LS_KEY = "fet_miles_cache_v1";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    ZIP CACHE HELPERS
@@ -229,55 +236,14 @@ function saveZipCacheToLocalStorage() {
     const MAX_KEYS = 300;
     const entries = Array.from(zipSuggestCache.entries());
     const trimmed = entries.slice(Math.max(0, entries.length - MAX_KEYS));
-    const obj = Object.fromEntries(trimmed);
-    localStorage.setItem(ZIP_LS_KEY, JSON.stringify(obj));
+    localStorage.setItem(ZIP_LS_KEY, JSON.stringify(Object.fromEntries(trimmed)));
   } catch (_) {}
 }
 loadZipCacheFromLocalStorage();
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   GOOGLE MAPS JS LOADER (Places + DistanceMatrix) with header status
+   MILES CACHE HELPERS
 ────────────────────────────────────────────────────────────────────────────── */
-let _gmapsPromise = null;
-
-function loadGoogleMapsJS() {
-  if (window.google?.maps) return Promise.resolve();
-  if (_gmapsPromise) return _gmapsPromise;
-
-  _gmapsPromise = new Promise((resolve, reject) => {
-    const statusEl = document.getElementById("dataStatus");
-
-    if (!GMAPS_KEY) {
-      console.warn("Google key not set. Places + Miles disabled.");
-      if (statusEl) statusEl.textContent = "Rates loaded (Google OFF)";
-      return resolve();
-    }
-
-    window.__initGMaps = () => {
-      if (statusEl) statusEl.textContent = "Rates loaded (Google OK)";
-      resolve();
-    };
-
-    const s = document.createElement("script");
-    s.async = true;
-    s.defer = true;
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&libraries=places&callback=__initGMaps`;
-    s.onerror = () => {
-      if (statusEl) statusEl.textContent = "Rates loaded (Google FAILED)";
-      reject(new Error("Google Maps JS failed to load"));
-    };
-    document.head.appendChild(s);
-  });
-
-  return _gmapsPromise;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   MILES CACHE
-────────────────────────────────────────────────────────────────────────────── */
-const milesCache = new Map();
-const MILES_LS_KEY = "fet_miles_cache_v1";
-
 function _makeMilesKey(originStr, destStr) {
   return `${originStr}`.trim().toUpperCase() + "||" + `${destStr}`.trim().toUpperCase();
 }
@@ -296,11 +262,49 @@ function saveMilesToLocalStorage() {
     const MAX_ENTRIES = 1500;
     const entries = Array.from(milesCache.entries());
     const trimmed = entries.slice(Math.max(0, entries.length - MAX_ENTRIES));
-    const obj = Object.fromEntries(trimmed);
-    localStorage.setItem(MILES_LS_KEY, JSON.stringify(obj));
+    localStorage.setItem(MILES_LS_KEY, JSON.stringify(Object.fromEntries(trimmed)));
   } catch (_) {}
 }
 loadMilesFromLocalStorage();
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   GOOGLE MAPS JS LOADER (robust)
+────────────────────────────────────────────────────────────────────────────── */
+let _gmapsPromise = null;
+
+function loadGoogleMapsJS() {
+  if (window.google?.maps?.places) return Promise.resolve();
+  if (_gmapsPromise) return _gmapsPromise;
+
+  _gmapsPromise = new Promise((resolve, reject) => {
+    const statusEl = () => document.getElementById("dataStatus");
+
+    if (!GMAPS_KEY) {
+      console.warn("Google key missing. Places disabled.");
+      const el = statusEl(); if (el) el.textContent = "Rates loaded (Google OFF)";
+      return resolve();
+    }
+
+    window.__initGMaps = () => {
+      const el = statusEl(); if (el) el.textContent = "Rates loaded (Google OK)";
+      resolve();
+    };
+
+    const s = document.createElement("script");
+    s.async = true;
+    s.defer = true;
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&libraries=places&callback=__initGMaps`;
+
+    s.onerror = () => {
+      const el = statusEl(); if (el) el.textContent = "Rates loaded (Google FAILED)";
+      reject(new Error("Google Maps JS failed to load (key/referrer/api)"));
+    };
+
+    document.head.appendChild(s);
+  });
+
+  return _gmapsPromise;
+}
 
 /* ─────────────────────────────────────────────────────────────────────────────
    BOOT: fetch rates.json
@@ -319,9 +323,13 @@ async function loadRates() {
     buildUI(origins, equipments);
     document.getElementById("dataStatus").textContent = RATES.length.toLocaleString() + " rates loaded";
 
-    loadGoogleMapsJS().then(() => initDestinationAutocomplete()).catch((e) => {
-      console.warn("Google Maps JS load failed:", e);
-    });
+    // Load Google and wire autocomplete
+    loadGoogleMapsJS()
+      .then(() => initDestinationAutocomplete())
+      .catch((e) => {
+        console.warn(e);
+        // Leave tool usable without Places; user can type city/state/zip manually
+      });
 
   } catch (e) {
     document.getElementById("appContainer").innerHTML =
@@ -394,7 +402,7 @@ function buildUI(origins, equipments) {
           <label>Destination State</label>
           <input type="text" id="destState" placeholder="e.g. GA">
         </div>
-        <div class="field" id="destZipField">
+        <div class="field">
           <label>Destination Zip</label>
           <input type="text" id="destZip" placeholder="e.g. 30303">
           <div class="zip-hint" id="zipHint" style="display:none;">Select a ZIP suggestion (or type one).</div>
@@ -427,23 +435,19 @@ function buildUI(origins, equipments) {
   </div>
   `;
 
-  // Hide picker when typing a ZIP manually
+  // Hide picker when typing ZIP
   document.getElementById("destZip")?.addEventListener("input", () => hideZipPicker());
 
-  // Auto-open picker on click/focus if we have last zips
+  // Auto-open picker on click/focus if last zips exist
   const zipInput = document.getElementById("destZip");
   zipInput?.addEventListener("focus", () => {
-    if (LAST_DEST_ZIPS?.length && LAST_DEST_CITY && LAST_DEST_STATE) {
-      showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE);
-    }
+    if (LAST_DEST_ZIPS.length && LAST_DEST_CITY && LAST_DEST_STATE) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE);
   });
   zipInput?.addEventListener("click", () => {
-    if (LAST_DEST_ZIPS?.length && LAST_DEST_CITY && LAST_DEST_STATE) {
-      showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE);
-    }
+    if (LAST_DEST_ZIPS.length && LAST_DEST_CITY && LAST_DEST_STATE) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE);
   });
 
-  // If user edits city/state manually, clear the last zips to avoid wrong suggestions
+  // If city/state edited manually, clear last zips to avoid wrong list
   document.getElementById("destCity")?.addEventListener("input", () => {
     LAST_DEST_CITY = ""; LAST_DEST_STATE = ""; LAST_DEST_ZIPS = [];
     hideZipPicker();
@@ -453,7 +457,7 @@ function buildUI(origins, equipments) {
     hideZipPicker();
   });
 
-  // Close picker when clicking outside
+  // Close picker on outside click
   document.addEventListener("click", (e) => {
     const picker = document.getElementById("zipPicker");
     if (!picker) return;
@@ -462,7 +466,7 @@ function buildUI(origins, equipments) {
     hideZipPicker();
   }, { capture: true });
 
-  // Close on scroll/resize (position becomes stale)
+  // Close on scroll/resize
   window.addEventListener("scroll", () => hideZipPicker(), { passive: true });
   window.addEventListener("resize", () => hideZipPicker(), { passive: true });
 }
@@ -500,7 +504,6 @@ function initDestinationAutocomplete() {
 
     const zips = await suggestZipsForCity(place);
 
-    // Save last selection so ZIP box can reopen picker
     LAST_DEST_CITY = cityEl.value.trim();
     LAST_DEST_STATE = stateEl.value.trim();
     LAST_DEST_ZIPS = zips;
@@ -512,17 +515,12 @@ function initDestinationAutocomplete() {
 async function suggestZipsForCity(place) {
   if (!place?.geometry?.location) return [];
 
-  const cityEl = document.getElementById("destCity");
-  const stateEl = document.getElementById("destState");
-  const city = (cityEl?.value || "").trim().toUpperCase();
-  const state = (stateEl?.value || "").trim().toUpperCase();
-
+  const city = (document.getElementById("destCity")?.value || "").trim().toUpperCase();
+  const state = (document.getElementById("destState")?.value || "").trim().toUpperCase();
   const key = _zipCacheKey(city, state);
 
-  // Memory cache hit
-  if (city && state && zipSuggestCache.has(key)) {
-    return zipSuggestCache.get(key);
-  }
+  // Cache hit
+  if (city && state && zipSuggestCache.has(key)) return zipSuggestCache.get(key);
 
   if (!window.google?.maps?.Geocoder) return [];
 
@@ -599,8 +597,7 @@ function showZipPicker(zips, city, state) {
   picker.addEventListener("click", (e) => {
     const row = e.target.closest(".zip-item");
     if (!row) return;
-    const zip = row.getAttribute("data-zip") || "";
-    zipInput.value = zip;
+    zipInput.value = row.getAttribute("data-zip") || "";
     hideZipPicker();
     zipInput.focus();
   });
@@ -611,23 +608,19 @@ function showZipPicker(zips, city, state) {
   const padding = 10;
   const spaceBelow = window.innerHeight - r.bottom - padding;
   const spaceAbove = r.top - padding;
-
   const openDown = spaceBelow >= 260 || spaceBelow >= spaceAbove;
 
   const maxHeight = Math.max(160, Math.min(560, openDown ? spaceBelow : spaceAbove));
   picker.style.maxHeight = `${maxHeight}px`;
-
   picker.style.width = `${r.width}px`;
 
   let left = r.left;
   left = Math.max(padding, Math.min(left, window.innerWidth - r.width - padding));
   picker.style.left = `${left}px`;
 
-  if (openDown) {
-    picker.style.top = `${Math.min(r.bottom + 6, window.innerHeight - maxHeight - padding)}px`;
-  } else {
-    picker.style.top = `${Math.max(padding, r.top - maxHeight - 6)}px`;
-  }
+  picker.style.top = openDown
+    ? `${Math.min(r.bottom + 6, window.innerHeight - maxHeight - padding)}px`
+    : `${Math.max(padding, r.top - maxHeight - 6)}px`;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -660,10 +653,8 @@ async function submitQuote() {
 
   const hasOrigin = !!originFac;
   const hasDest   = (destCity && destState) || destZip;
-
   if (!hasOrigin || !hasDest) { banner.classList.add("show"); return; }
   banner.classList.remove("show");
-
   hideZipPicker();
 
   const btn = document.querySelector(".btn-primary");
@@ -682,7 +673,7 @@ async function submitQuote() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   MILEAGE (DistanceMatrixService)
+   MILEAGE (DistanceMatrixService + cache)
 ────────────────────────────────────────────────────────────────────────────── */
 function buildOriginString(originZip, originFac) {
   if (originZip) return originZip;
@@ -710,13 +701,11 @@ async function getMileageCached(originZip, originFac, destZip, destCity, destSta
 
 async function getMileageGoogle(originStr, destStr) {
   if (!GMAPS_KEY) return null;
-
   try {
     await loadGoogleMapsJS();
     if (!window.google?.maps?.DistanceMatrixService) return null;
 
     const service = new google.maps.DistanceMatrixService();
-
     const response = await new Promise((resolve, reject) => {
       service.getDistanceMatrix(
         {
@@ -724,21 +713,15 @@ async function getMileageGoogle(originStr, destStr) {
           destinations: [destStr],
           travelMode: google.maps.TravelMode.DRIVING,
           unitSystem: google.maps.UnitSystem.IMPERIAL,
-          avoidHighways: false,
-          avoidTolls: false,
         },
-        (res, status) => {
-          if (status !== "OK") return reject(new Error(status));
-          resolve(res);
-        }
+        (res, status) => status === "OK" ? resolve(res) : reject(new Error(status))
       );
     });
 
     const el = response?.rows?.[0]?.elements?.[0];
     if (!el || el.status !== "OK") return null;
 
-    const meters = el.distance.value;
-    return Math.round(meters / 1609.34);
+    return Math.round(el.distance.value / 1609.34);
   } catch (e) {
     console.warn("Mileage lookup failed:", e);
     return null;
@@ -760,6 +743,7 @@ function findRate(originFac, destCity, destState, destZip, equipment) {
 
     if (equipment && equip && equipment !== equip) continue;
 
+    // Origin
     let origScore = 0;
     if (origLoc) {
       if (nc(origLoc) === nc(originFac)) origScore = 3;
@@ -771,6 +755,7 @@ function findRate(originFac, destCity, destState, destZip, equipment) {
       origScore = 1;
     }
 
+    // Destination
     let destScore = 0;
     if (destLoc) {
       const city = nc(destLoc);
@@ -800,7 +785,7 @@ function findRate(originFac, destCity, destState, destZip, equipment) {
     const totalScore = origScore * 10 + destScore;
     if (totalScore > bestScore) {
       bestScore = totalScore;
-      best = { uom, rate, flat, currency, minCharge, equip, origLoc, destLoc, destPostal, score: totalScore };
+      best = { uom, rate, flat, currency, minCharge, equip, score: totalScore };
     }
   }
 
@@ -820,7 +805,7 @@ function displayResults(match, miles) {
   if (!match) {
     badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
     rateTypeBadge.textContent = "";
-    content.innerHTML = '<div class="no-results">No rate found for this origin/destination. Check your inputs or contact your freight coordinator.</div>';
+    content.innerHTML = '<div class="no-results">No rate found for this origin/destination.</div>';
     return;
   }
 
@@ -845,7 +830,7 @@ function displayResults(match, miles) {
   const gpAvg  = isMI ? gpRate * milesActual : gpRate;
   const gpFuel = isMI ? gpRate * milesActual * 0.25 : gpRate * 0.18;
 
-  window._matchData = { isMI, gpRate, minCharge, currency, gpAvg, gpFuel, milesActual };
+  window._matchData = { isMI, gpRate, minCharge, currency, gpAvg, gpFuel };
 
   const milesNote = milesFailed
     ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
@@ -866,9 +851,9 @@ function displayResults(match, miles) {
     <tbody>
       <tr>
         <td>Miles${milesNote}</td>
-        <td class="mono" id="gpMiles">${milesLabel}</td>
-        <td class="mono" id="adjMiles">${milesLabel}</td>
-        <td class="mono diff-zero" id="diffMiles">—</td>
+        <td class="mono">${milesLabel}</td>
+        <td class="mono">${milesLabel}</td>
+        <td class="mono diff-zero">—</td>
       </tr>
       <tr>
         <td>Rate Per Mile</td>
@@ -914,7 +899,6 @@ function recalc() {
   const mult   = 1 + adjPct / 100;
 
   const adjAvg  = gpAvg * mult;
-  const adjFuel = gpFuel;
   const adjRPM  = isMI ? gpRate * mult : 0;
 
   const gpTotal  = Math.max(gpAvg + gpFuel, minCharge);
@@ -927,7 +911,7 @@ function recalc() {
     set("diffRPM", `<span class="${dc(pct(adjRPM, gpRate))}">${fp(pct(adjRPM, gpRate))}</span>`);
   }
 
-  set("adjFuelCell", fmt(adjFuel, currency));
+  set("adjFuelCell", fmt(gpFuel, currency));
   set("diffFuel", `<span class="mono diff-zero">—</span>`);
 
   set("adjAvgCell", fmt(adjAvg, currency));
@@ -943,12 +927,7 @@ function recalc() {
 ────────────────────────────────────────────────────────────────────────────── */
 function fmt(val, currency) {
   if (val == null || isNaN(val)) return "$0.00";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currency || "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(val);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: currency || "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 }
 function pct(a, b) { return (!b || b === 0) ? 0 : ((a - b) / Math.abs(b)) * 100; }
 function fp(val)   { return (val >= 0 ? "+" : "") + val.toFixed(2) + "%"; }
@@ -962,16 +941,17 @@ function clearForm() {
   const eq = document.getElementById("equipment"); if (eq) eq.value = "";
   const pa = document.getElementById("pctAdj"); if (pa) pa.value = 0;
   document.getElementById("errorBanner")?.classList.remove("show");
-  const mb = document.getElementById("matchBadge"); if (mb) mb.innerHTML = "";
-  const rb = document.getElementById("rateTypeBadge"); if (rb) rb.textContent = "";
+  document.getElementById("matchBadge")?.replaceChildren();
+  document.getElementById("rateTypeBadge") && (document.getElementById("rateTypeBadge").textContent = "");
   const rc = document.getElementById("resultsContent");
   if (rc) rc.innerHTML = '<div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>';
+
   currentMatch = null;
   window._matchData = null;
 
   LAST_DEST_CITY = "";
   LAST_DEST_STATE = "";
-  LAST_DEST_ZIPS = "";
+  LAST_DEST_ZIPS = []; /* <-- important */
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
