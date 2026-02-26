@@ -213,7 +213,7 @@ function loadGoogleMapsJS() {
   _gmapsPromise = new Promise((resolve, reject) => {
     const statusEl = document.getElementById("dataStatus");
 
-    if (!GMAPS_KEY || GMAPS_KEY.includes("PASTE_YOUR_GOOGLE_KEY_HERE")) {
+    if (!GMAPS_KEY || GMAPS_KEY.includes("AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg")) {
       console.warn("Google key not set. Places + Miles disabled.");
       if (statusEl) statusEl.textContent = "Rates loaded (Google OFF)";
       return resolve();
