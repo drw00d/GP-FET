@@ -5,184 +5,114 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Freight Estimate Tool</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-
 <style>
-  :root {
-    --bg: #f0f2f5;
-    --panel: #ffffff;
-    --header-bg: #1a2332;
-    --header-text: #ffffff;
-    --accent: #1a56db;
-    --accent-hover: #1246c5;
-    --border: #e2e8f0;
-    --border-focus: #93c5fd;
-    --text: #1e293b;
-    --text-muted: #64748b;
-    --label: #475569;
-    --input-bg: #f8fafc;
-    --row-alt: #f8fafc;
-    --total-bg: #fef9c3;
-    --total-border: #eab308;
-    --error: #dc2626;
-    --positive: #16a34a;
-    --negative: #dc2626;
-    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-
-  .header {
-    background: var(--header-bg);
-    color: var(--header-text);
-    padding: 14px 28px;
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .header-icon {
-    width: 28px; height: 28px;
-    background: var(--accent);
-    border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
-  }
-
-  .container { max-width: 860px; margin: 24px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
-  .card { background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
-  .card-body { padding: 20px 24px; }
-
-  .loading-overlay { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 14px; }
-  .load-error {
-    background: #fef2f2; border-left: 3px solid var(--error); color: var(--error);
-    padding: 14px 20px; font-size: 13px; font-weight: 500; border-radius: 4px;
-  }
-
-  .error-banner {
-    background: #fef2f2; border-left: 3px solid var(--error); color: var(--error);
-    padding: 10px 16px; font-size: 13px; font-weight: 500; margin-bottom: 16px;
-    border-radius: 4px; display: none;
-  }
-  .error-banner.show { display: block; }
-
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
-  .form-row-5 { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
-  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 20px; }
-
-  .field { display: flex; flex-direction: column; gap: 5px; }
-  .field label { font-size: 11px; font-weight: 600; color: var(--label); text-transform: uppercase; letter-spacing: 0.06em; }
-  .field input, .field select {
-    background: var(--input-bg); border: 1.5px solid var(--border); border-radius: 7px;
-    padding: 8px 11px; font-family: inherit; font-size: 13.5px; color: var(--text);
-    transition: border-color 0.15s, box-shadow 0.15s; outline: none; width: 100%;
-  }
-  .field input:focus, .field select:focus {
-    border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(147,197,253,0.25);
-  }
-  .field input::placeholder { color: #94a3b8; }
-  .field input[readonly] { background: #f1f5f9; color: var(--text-muted); cursor: default; }
-
-  .section-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
-
-  .btn-row { display: flex; gap: 10px; align-items: center; }
-  .btn { padding: 9px 22px; border-radius: 8px; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
-  .btn-primary { background: var(--accent); color: white; }
-  .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,86,219,0.3); }
-  .btn-primary:disabled { opacity: 0.75; cursor: not-allowed; transform: none; box-shadow: none; }
-  .btn-secondary { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); }
-  .btn-secondary:hover { background: var(--bg); color: var(--text); }
-
-  .results-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 24px; border-bottom: 1.5px solid var(--border);
-  }
-  .results-header-left { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-
-  .adj-panel {
-    padding: 14px 24px; border-bottom: 1.5px solid var(--border);
-    display: flex; align-items: center; gap: 14px;
-  }
-  .adj-panel label { font-size: 13px; font-weight: 600; color: var(--label); white-space: nowrap; }
-  .adj-input-wrap { display: flex; align-items: center; gap: 6px; }
-  .adj-input-wrap span { font-size: 14px; font-weight: 600; color: var(--text-muted); }
-  .adj-input {
-    background: var(--input-bg); border: 1.5px solid var(--border); border-radius: 7px;
-    padding: 7px 10px; font-family: 'DM Mono', monospace; font-size: 14px;
-    width: 100px; outline: none; color: var(--text); text-align: right;
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-  .adj-input:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(147,197,253,0.2); }
-  .adj-hint { font-size: 12px; color: var(--text-muted); font-style: italic; }
-
-  table { width: 100%; border-collapse: collapse; }
-  thead tr { border-bottom: 2px solid var(--border); }
-  thead th { padding: 10px 24px; text-align: right; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
-  thead th:first-child { text-align: left; }
-  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
-  tbody tr:nth-child(even) { background: var(--row-alt); }
-  tbody tr:hover { background: #f1f5fb; }
-  tbody td { padding: 13px 24px; font-size: 13.5px; text-align: right; color: var(--text); }
-  tbody td:first-child { text-align: left; font-weight: 500; }
-
-  .mono { font-family: 'DM Mono', monospace; }
-  .diff-positive { color: var(--positive); font-weight: 600; }
-  .diff-negative { color: var(--negative); font-weight: 600; }
-  .diff-zero { color: var(--text-muted); }
-
-  tfoot .total-row td {
-    background: var(--total-bg) !important; border-top: 2px solid var(--total-border);
-    font-weight: 700; font-size: 14px; padding: 14px 24px;
-  }
-
-  .no-results { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 14px; }
-
-  .match-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 20px; margin-left: 10px; }
-  .match-exact { background: #dcfce7; color: #15803d; }
-  .match-partial { background: #fef3c7; color: #92400e; }
-  .match-none { background: #fee2e2; color: #991b1b; }
-
-  .currency-badge { font-size: 10px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 1px 6px; border-radius: 4px; margin-left: 4px; vertical-align: middle; }
-  .data-status { font-size: 11px; color: var(--text-muted); margin-left: auto; font-style: italic; }
-
-  /* ZIP picker (portal overlay) */
-  .zip-picker {
-    position: fixed;
-    background: #fff;
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 16px 40px rgba(0,0,0,0.16);
-    overflow: auto;
-    z-index: 999999;
-    width: 320px;
-    max-height: 420px; /* overridden dynamically */
-  }
-  .zip-item {
-    padding: 10px 12px;
-    cursor: pointer;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-  }
-  .zip-item:last-child { border-bottom: none; }
-  .zip-item:hover { background: #f1f5fb; }
-  .zip-hint {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 6px;
-    font-style: italic;
-  }
+:root {
+  --bg: #f0f2f5;
+  --panel: #ffffff;
+  --header-bg: #1a2332;
+  --header-text: #ffffff;
+  --accent: #1a56db;
+  --accent-hover: #1246c5;
+  --rail-accent: #0f766e;
+  --rail-accent-hover: #0d6460;
+  --border: #e2e8f0;
+  --border-focus: #93c5fd;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --label: #475569;
+  --input-bg: #f8fafc;
+  --row-alt: #f8fafc;
+  --total-bg: #fef9c3;
+  --total-border: #eab308;
+  --error: #dc2626;
+  --positive: #16a34a;
+  --negative: #dc2626;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.header { background: var(--header-bg); color: var(--header-text); padding: 14px 28px; font-size: 15px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.header-icon { width: 28px; height: 28px; background: var(--accent); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.header-icon.rail { background: var(--rail-accent); }
+.container { max-width: 860px; margin: 24px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--panel); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.card-body { padding: 20px 24px; }
+.loading-overlay { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 14px; }
+.load-error { background: #fef2f2; border-left: 3px solid var(--error); color: var(--error); padding: 14px 20px; font-size: 13px; font-weight: 500; border-radius: 4px; }
+.error-banner { background: #fef2f2; border-left: 3px solid var(--error); color: var(--error); padding: 10px 16px; font-size: 13px; font-weight: 500; margin-bottom: 16px; border-radius: 4px; display: none; }
+.error-banner.show { display: block; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.form-row-5 { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 11px; font-weight: 600; color: var(--label); text-transform: uppercase; letter-spacing: 0.06em; }
+.field input, .field select { background: var(--input-bg); border: 1.5px solid var(--border); border-radius: 7px; padding: 8px 11px; font-family: inherit; font-size: 13.5px; color: var(--text); transition: border-color 0.15s, box-shadow 0.15s; outline: none; width: 100%; }
+.field input:focus, .field select:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(147,197,253,0.25); }
+.field input::placeholder { color: #94a3b8; }
+.field input[readonly] { background: #f1f5f9; color: var(--text-muted); cursor: default; }
+.section-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+.btn-row { display: flex; gap: 10px; align-items: center; }
+.btn { padding: 9px 22px; border-radius: 8px; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary.rail-mode { background: var(--rail-accent); }
+.btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,86,219,0.3); }
+.btn-primary.rail-mode:hover { background: var(--rail-accent-hover); box-shadow: 0 4px 12px rgba(15,118,110,0.3); }
+.btn-primary:disabled { opacity: 0.75; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-secondary { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); }
+.btn-secondary:hover { background: var(--bg); color: var(--text); }
+.results-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; border-bottom: 1.5px solid var(--border); }
+.results-header-left { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.adj-panel { padding: 14px 24px; border-bottom: 1.5px solid var(--border); display: flex; align-items: center; gap: 14px; }
+.adj-panel label { font-size: 13px; font-weight: 600; color: var(--label); white-space: nowrap; }
+.adj-input-wrap { display: flex; align-items: center; gap: 6px; }
+.adj-input-wrap span { font-size: 14px; font-weight: 600; color: var(--text-muted); }
+.adj-input { background: var(--input-bg); border: 1.5px solid var(--border); border-radius: 7px; padding: 7px 10px; font-family: 'DM Mono', monospace; font-size: 14px; width: 100px; outline: none; color: var(--text); text-align: right; transition: border-color 0.15s, box-shadow 0.15s; }
+.adj-input:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(147,197,253,0.2); }
+.adj-hint { font-size: 12px; color: var(--text-muted); font-style: italic; }
+table { width: 100%; border-collapse: collapse; }
+thead tr { border-bottom: 2px solid var(--border); }
+thead th { padding: 10px 24px; text-align: right; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
+thead th:first-child { text-align: left; }
+tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+tbody tr:nth-child(even) { background: var(--row-alt); }
+tbody tr:hover { background: #f1f5fb; }
+tbody td { padding: 13px 24px; font-size: 13.5px; text-align: right; color: var(--text); }
+tbody td:first-child { text-align: left; font-weight: 500; }
+.mono { font-family: 'DM Mono', monospace; }
+.diff-positive { color: var(--positive); font-weight: 600; }
+.diff-negative { color: var(--negative); font-weight: 600; }
+.diff-zero { color: var(--text-muted); }
+tfoot .total-row td { background: var(--total-bg) !important; border-top: 2px solid var(--total-border); font-weight: 700; font-size: 14px; padding: 14px 24px; }
+.no-results { text-align: center; padding: 40px 24px; color: var(--text-muted); font-size: 14px; }
+.match-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 20px; margin-left: 10px; }
+.match-exact { background: #dcfce7; color: #15803d; }
+.match-partial { background: #fef3c7; color: #92400e; }
+.match-none { background: #fee2e2; color: #991b1b; }
+.currency-badge { font-size: 10px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 1px 6px; border-radius: 4px; margin-left: 4px; vertical-align: middle; }
+.data-status { font-size: 11px; color: var(--text-muted); margin-left: auto; font-style: italic; }
+/* Mode Toggle */
+.mode-toggle { display: flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1.5px solid var(--border); width: fit-content; }
+.mode-btn { padding: 8px 20px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: var(--input-bg); color: var(--text-muted); transition: all 0.15s; letter-spacing: 0.03em; }
+.mode-btn:first-child { border-right: 1px solid var(--border); }
+.mode-btn.active-truck { background: var(--accent); color: white; }
+.mode-btn.active-rail { background: var(--rail-accent); color: white; }
+.mode-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; padding: 2px 10px; border-radius: 20px; margin-left: 8px; vertical-align: middle; }
+.mode-badge-truck { background: #dbeafe; color: #1e40af; }
+.mode-badge-rail { background: #ccfbf1; color: #0f5132; }
+/* ZIP picker */
+.zip-picker { position: fixed; background: #fff; border: 1.5px solid var(--border); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.16); overflow: auto; z-index: 999999; width: 320px; max-height: 420px; }
+.zip-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 13px; }
+.zip-item:last-child { border-bottom: none; }
+.zip-item:hover { background: #f1f5fb; }
+.zip-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; font-style: italic; }
 </style>
 </head>
-
 <body>
 <div class="header">
-  <div class="header-icon">🚚</div>
+  <div class="header-icon" id="headerIcon">🚚</div>
   Freight Estimate Tool
   <span class="data-status" id="dataStatus">Loading rates…</span>
 </div>
-
 <div class="container" id="appContainer">
   <div class="card">
     <div class="card-body">
@@ -190,12 +120,15 @@
     </div>
   </div>
 </div>
-
 <script>
 /* ─────────────────────────────────────────────────────────────────────────────
    CONFIG
 ────────────────────────────────────────────────────────────────────────────── */
 const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg";
+const RATES_FILES = {
+  truck: "rates.json",
+  rail:  "rail_rates.json"
+};
 
 /* ─────────────────────────────────────────────────────────────────────────────
    STATE
@@ -203,6 +136,7 @@ const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg";
 let RATES = [];
 let ORIGIN_ZIPS = {};
 let currentMatch = null;
+let currentMode = "truck"; // "truck" | "rail"
 
 /* ZIP suggestions cache */
 const zipSuggestCache = new Map();
@@ -218,349 +152,284 @@ const MILES_LS_KEY = "fet_miles_cache_v1";
 /* ─────────────────────────────────────────────────────────────────────────────
    ZIP CACHE HELPERS
 ────────────────────────────────────────────────────────────────────────────── */
-function _zipCacheKey(city, state) {
-  return `${(city || "").trim().toUpperCase()}||${(state || "").trim().toUpperCase()}`;
-}
+function _zipCacheKey(city, state) { return `${(city||"").trim().toUpperCase()}||${(state||"").trim().toUpperCase()}`; }
 function loadZipCacheFromLocalStorage() {
-  try {
-    const raw = localStorage.getItem(ZIP_LS_KEY);
-    if (!raw) return;
-    const obj = JSON.parse(raw);
-    for (const [k, v] of Object.entries(obj)) {
-      if (Array.isArray(v)) zipSuggestCache.set(k, v.filter(Boolean));
-    }
-  } catch (_) {}
+  try { const raw = localStorage.getItem(ZIP_LS_KEY); if (!raw) return; const obj = JSON.parse(raw); for (const [k,v] of Object.entries(obj)) { if (Array.isArray(v)) zipSuggestCache.set(k, v.filter(Boolean)); } } catch(_) {}
 }
 function saveZipCacheToLocalStorage() {
-  try {
-    const MAX_KEYS = 300;
-    const entries = Array.from(zipSuggestCache.entries());
-    const trimmed = entries.slice(Math.max(0, entries.length - MAX_KEYS));
-    localStorage.setItem(ZIP_LS_KEY, JSON.stringify(Object.fromEntries(trimmed)));
-  } catch (_) {}
+  try { const MAX_KEYS = 300; const entries = Array.from(zipSuggestCache.entries()); const trimmed = entries.slice(Math.max(0, entries.length - MAX_KEYS)); localStorage.setItem(ZIP_LS_KEY, JSON.stringify(Object.fromEntries(trimmed))); } catch(_) {}
 }
 loadZipCacheFromLocalStorage();
 
 /* ─────────────────────────────────────────────────────────────────────────────
    MILES CACHE HELPERS
 ────────────────────────────────────────────────────────────────────────────── */
-function _makeMilesKey(originStr, destStr) {
-  return `${originStr}`.trim().toUpperCase() + "||" + `${destStr}`.trim().toUpperCase();
-}
+function _makeMilesKey(originStr, destStr) { return `${originStr}`.trim().toUpperCase() + "||" + `${destStr}`.trim().toUpperCase(); }
 function loadMilesFromLocalStorage() {
-  try {
-    const raw = localStorage.getItem(MILES_LS_KEY);
-    if (!raw) return;
-    const obj = JSON.parse(raw);
-    for (const [k, v] of Object.entries(obj)) {
-      if (typeof v === "number") milesCache.set(k, v);
-    }
-  } catch (_) {}
+  try { const raw = localStorage.getItem(MILES_LS_KEY); if (!raw) return; const obj = JSON.parse(raw); for (const [k,v] of Object.entries(obj)) { if (typeof v === "number") milesCache.set(k,v); } } catch(_) {}
 }
 function saveMilesToLocalStorage() {
-  try {
-    const MAX_ENTRIES = 1500;
-    const entries = Array.from(milesCache.entries());
-    const trimmed = entries.slice(Math.max(0, entries.length - MAX_ENTRIES));
-    localStorage.setItem(MILES_LS_KEY, JSON.stringify(Object.fromEntries(trimmed)));
-  } catch (_) {}
+  try { const MAX_ENTRIES = 1500; const entries = Array.from(milesCache.entries()); const trimmed = entries.slice(Math.max(0, entries.length - MAX_ENTRIES)); localStorage.setItem(MILES_LS_KEY, JSON.stringify(Object.fromEntries(trimmed))); } catch(_) {}
 }
 loadMilesFromLocalStorage();
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   GOOGLE MAPS JS LOADER (robust)
+   GOOGLE MAPS JS LOADER
 ────────────────────────────────────────────────────────────────────────────── */
 let _gmapsPromise = null;
-
 function loadGoogleMapsJS() {
   if (window.google?.maps?.places) return Promise.resolve();
   if (_gmapsPromise) return _gmapsPromise;
-
   _gmapsPromise = new Promise((resolve, reject) => {
     const statusEl = () => document.getElementById("dataStatus");
-
-    if (!GMAPS_KEY) {
-      console.warn("Google key missing. Places disabled.");
-      const el = statusEl(); if (el) el.textContent = "Rates loaded (Google OFF)";
-      return resolve();
-    }
-
-    window.__initGMaps = () => {
-      const el = statusEl(); if (el) el.textContent = "Rates loaded (Google OK)";
-      resolve();
-    };
-
+    if (!GMAPS_KEY) { console.warn("Google key missing."); const el = statusEl(); if (el) el.textContent = "Rates loaded (Google OFF)"; return resolve(); }
+    window.__initGMaps = () => { const el = statusEl(); if (el) el.textContent = updateStatusText(); resolve(); };
     const s = document.createElement("script");
-    s.async = true;
-    s.defer = true;
+    s.async = true; s.defer = true;
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&libraries=places&callback=__initGMaps`;
-
-    s.onerror = () => {
-      const el = statusEl(); if (el) el.textContent = "Rates loaded (Google FAILED)";
-      reject(new Error("Google Maps JS failed to load (key/referrer/api)"));
-    };
-
+    s.onerror = () => { const el = statusEl(); if (el) el.textContent = "Rates loaded (Google FAILED)"; reject(new Error("Google Maps JS failed")); };
     document.head.appendChild(s);
   });
-
   return _gmapsPromise;
 }
 
+function updateStatusText() {
+  return RATES.length.toLocaleString() + " rates loaded (" + (currentMode === "rail" ? "Rail" : "Truck") + ")";
+}
 /* ─────────────────────────────────────────────────────────────────────────────
-   BOOT: fetch rates.json
+   MODE SWITCHING
+────────────────────────────────────────────────────────────────────────────── */
+async function switchMode(mode) {
+  if (mode === currentMode) return;
+  currentMode = mode;
+
+  // Update header icon + color
+  const icon = document.getElementById("headerIcon");
+  if (icon) { icon.textContent = mode === "rail" ? "🚂" : "🚚"; icon.className = mode === "rail" ? "header-icon rail" : "header-icon"; }
+
+  // Update mode buttons
+  const truckBtn = document.getElementById("modeBtnTruck");
+  const railBtn  = document.getElementById("modeBtnRail");
+  if (truckBtn) truckBtn.className = "mode-btn" + (mode === "truck" ? " active-truck" : "");
+  if (railBtn)  railBtn.className  = "mode-btn" + (mode === "rail"  ? " active-rail"  : "");
+
+  // Update submit button color
+  const submitBtn = document.querySelector(".btn-primary");
+  if (submitBtn) submitBtn.className = "btn btn-primary" + (mode === "rail" ? " rail-mode" : "");
+
+  // Show loading, reload rates
+  document.getElementById("dataStatus").textContent = "Loading " + (mode === "rail" ? "rail" : "truck") + " rates…";
+
+  // Clear current results
+  clearForm();
+
+  await loadRates();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   BOOT: fetch rates from appropriate file
 ────────────────────────────────────────────────────────────────────────────── */
 async function loadRates() {
+  const file = RATES_FILES[currentMode];
   try {
-    const res = await fetch("rates.json?_=" + Date.now());
+    const res = await fetch(file + "?_=" + Date.now());
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-
     RATES = data.rates || [];
     ORIGIN_ZIPS = data.origin_zips || {};
     const origins = data.origins || [];
     const equipments = data.equipments || [];
 
-    buildUI(origins, equipments);
-    document.getElementById("dataStatus").textContent = RATES.length.toLocaleString() + " rates loaded";
+    // Only show first load full UI; on mode switch rebuild relevant parts
+    if (!document.getElementById("originFacility")) {
+      buildUI(origins, equipments);
+      // Load Google and wire autocomplete
+      loadGoogleMapsJS()
+        .then(() => initDestinationAutocomplete())
+        .catch((e) => { console.warn(e); });
+    } else {
+      // Just update the origin options and equipment visibility
+      updateOriginOptions(origins, equipments);
+    }
 
-    // Load Google and wire autocomplete
-    loadGoogleMapsJS()
-      .then(() => initDestinationAutocomplete())
-      .catch((e) => {
-        console.warn(e);
-        // Leave tool usable without Places; user can type city/state/zip manually
-      });
-
+    document.getElementById("dataStatus").textContent = updateStatusText();
   } catch (e) {
     document.getElementById("appContainer").innerHTML =
       '<div class="card"><div class="card-body"><div class="load-error">' +
-      "⚠️ Could not load rates.json — make sure the file is in the same folder as index.html.<br><small>" +
-      e.message + "</small></div></div></div>";
+      "⚠️ Could not load " + file + " — make sure the file is in the same folder as index.html.<br><small>" + e.message + "</small></div></div></div>";
     document.getElementById("dataStatus").textContent = "Load failed";
   }
 }
 
+function updateOriginOptions(origins, equipments) {
+  const originSel = document.getElementById("originFacility");
+  if (originSel) {
+    originSel.innerHTML = '<option value="">-- Select Origin --</option>' +
+      origins.map(o => `<option value="${o}">${o}</option>`).join("");
+    originSel.value = "";
+    document.getElementById("originCity").value = "";
+    document.getElementById("originState").value = "";
+    document.getElementById("originZip").value = "";
+  }
+}
+/* ─────────────────────────────────────────────────────────────────────────────
+   BUILD UI
+────────────────────────────────────────────────────────────────────────────── */
 function buildUI(origins, equipments) {
   const originOptions = origins.map(o => `<option value="${o}">${o}</option>`).join("");
-  const equipOptions = equipments.map(e => `<option value="${e}">${e}</option>`).join("");
+  const isRail = currentMode === "rail";
 
   document.getElementById("appContainer").innerHTML = `
-  <div class="card">
-    <div class="card-body">
-      <div class="form-grid">
-        <div class="field">
-          <label>Owner / Organization</label>
-          <input type="text" id="owner" value="WOOD_PRODUCTS" placeholder="e.g. WOOD_PRODUCTS">
+    <div class="card">
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label>Owner / Organization</label>
+            <input type="text" id="owner" value="WOOD_PRODUCTS" placeholder="e.g. WOOD_PRODUCTS">
+          </div>
+          <div class="field">
+            <label>Equipment Mode</label>
+            <div class="mode-toggle">
+              <button class="mode-btn active-truck" id="modeBtnTruck" onclick="switchMode('truck')">🚚 Truck</button>
+              <button class="mode-btn" id="modeBtnRail" onclick="switchMode('rail')">🚂 Rail</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Week Of</label>
+            <input type="date" id="weekOf" value="${new Date().toISOString().slice(0,10)}">
+          </div>
         </div>
-        <div class="field">
-          <label>Equipment Type</label>
-          <select id="equipment">
-            <option value="">-- Any --</option>
-            ${equipOptions}
-          </select>
+        <div class="error-banner" id="errorBanner">
+          Origin facility and Destination (City &amp; State, or Zip) are required.
         </div>
-        <div class="field">
-          <label>Week Of</label>
-          <input type="date" id="weekOf" value="${new Date().toISOString().slice(0,10)}">
+        <div class="section-label">Origin</div>
+        <div class="form-row-5">
+          <div class="field">
+            <label>Origin Facility</label>
+            <select id="originFacility" onchange="onOriginChange()">
+              <option value="">-- Select Origin --</option>
+              ${originOptions}
+            </select>
+          </div>
+          <div class="field">
+            <label>Origin City</label>
+            <input type="text" id="originCity" placeholder="e.g. ROME" readonly>
+          </div>
+          <div class="field">
+            <label>Origin State</label>
+            <input type="text" id="originState" placeholder="e.g. GA" readonly>
+          </div>
+          <div class="field">
+            <label>Origin Zip Code</label>
+            <input type="text" id="originZip" placeholder="Auto-filled" readonly>
+          </div>
         </div>
-      </div>
-
-      <div class="error-banner" id="errorBanner">
-        Origin facility and Destination (City &amp; State, or Zip) are required.
-      </div>
-
-      <div class="section-label">Origin</div>
-      <div class="form-row-5">
-        <div class="field">
-          <label>Origin Facility</label>
-          <select id="originFacility" onchange="onOriginChange()">
-            <option value="">-- Select Origin --</option>
-            ${originOptions}
-          </select>
+        <div class="section-label">Destination</div>
+        <div class="form-row-3">
+          <div class="field">
+            <label>Destination City</label>
+            <input type="text" id="destCity" placeholder="e.g. ATLANTA">
+          </div>
+          <div class="field">
+            <label>Destination State</label>
+            <input type="text" id="destState" placeholder="e.g. GA">
+          </div>
+          <div class="field">
+            <label>Destination Zip</label>
+            <input type="text" id="destZip" placeholder="e.g. 30303">
+            <div class="zip-hint" id="zipHint" style="display:none;">Select a ZIP suggestion (or type one).</div>
+          </div>
         </div>
-        <div class="field">
-          <label>Origin City</label>
-          <input type="text" id="originCity" placeholder="e.g. ROME" readonly>
+        <div class="btn-row">
+          <button class="btn btn-primary${isRail ? ' rail-mode' : ''}" onclick="submitQuote()">Submit</button>
+          <button class="btn btn-secondary" onclick="clearForm()">Clear</button>
         </div>
-        <div class="field">
-          <label>Origin State</label>
-          <input type="text" id="originState" placeholder="e.g. GA" readonly>
-        </div>
-        <div class="field">
-          <label>Origin Zip Code</label>
-          <input type="text" id="originZip" placeholder="Auto-filled" readonly>
-        </div>
-      </div>
-
-      <div class="section-label">Destination</div>
-      <div class="form-row-3">
-        <div class="field">
-          <label>Destination City</label>
-          <input type="text" id="destCity" placeholder="e.g. ATLANTA">
-        </div>
-        <div class="field">
-          <label>Destination State</label>
-          <input type="text" id="destState" placeholder="e.g. GA">
-        </div>
-        <div class="field">
-          <label>Destination Zip</label>
-          <input type="text" id="destZip" placeholder="e.g. 30303">
-          <div class="zip-hint" id="zipHint" style="display:none;">Select a ZIP suggestion (or type one).</div>
-        </div>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn btn-primary" onclick="submitQuote()">Submit</button>
-        <button class="btn btn-secondary" onclick="clearForm()">Clear</button>
       </div>
     </div>
-  </div>
-
-  <div class="card" id="resultsCard">
-    <div class="results-header">
-      <div class="results-header-left">Rate Type <span id="rateTypeBadge"></span></div>
-      <div id="matchBadge"></div>
-    </div>
-    <div class="adj-panel">
-      <label>% Adjustment to GP Rate</label>
-      <div class="adj-input-wrap">
-        <input class="adj-input" type="number" id="pctAdj" value="0" step="0.1" min="-100" max="999" onchange="recalc()" oninput="recalc()">
-        <span>%</span>
+    <div class="card" id="resultsCard">
+      <div class="results-header">
+        <div class="results-header-left">Rate Type <span id="rateTypeBadge"></span></div>
+        <div id="matchBadge"></div>
       </div>
-      <span class="adj-hint">Positive = markup &nbsp;|&nbsp; Negative = discount</span>
+      <div class="adj-panel">
+        <label>% Adjustment to GP Rate</label>
+        <div class="adj-input-wrap">
+          <input class="adj-input" type="number" id="pctAdj" value="0" step="0.1" min="-100" max="999" onchange="recalc()" oninput="recalc()">
+          <span>%</span>
+        </div>
+        <span class="adj-hint">Positive = markup &nbsp;|&nbsp; Negative = discount</span>
+      </div>
+      <div id="resultsContent">
+        <div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>
+      </div>
     </div>
-    <div id="resultsContent">
-      <div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>
-    </div>
-  </div>
   `;
 
-  // Hide picker when typing ZIP
+  // Reflect current mode in toggle buttons (for mode switches after initial build)
+  const truckBtn = document.getElementById("modeBtnTruck");
+  const railBtn  = document.getElementById("modeBtnRail");
+  if (currentMode === "rail") {
+    if (truckBtn) truckBtn.className = "mode-btn";
+    if (railBtn)  railBtn.className  = "mode-btn active-rail";
+  }
+
+  // ZIP picker events
   document.getElementById("destZip")?.addEventListener("input", () => hideZipPicker());
-
-  // Auto-open picker on click/focus if last zips exist
   const zipInput = document.getElementById("destZip");
-  zipInput?.addEventListener("focus", () => {
-    if (LAST_DEST_ZIPS.length && LAST_DEST_CITY && LAST_DEST_STATE) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE);
-  });
-  zipInput?.addEventListener("click", () => {
-    if (LAST_DEST_ZIPS.length && LAST_DEST_CITY && LAST_DEST_STATE) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE);
-  });
-
-  // If city/state edited manually, clear last zips to avoid wrong list
-  document.getElementById("destCity")?.addEventListener("input", () => {
-    LAST_DEST_CITY = ""; LAST_DEST_STATE = ""; LAST_DEST_ZIPS = [];
-    hideZipPicker();
-  });
-  document.getElementById("destState")?.addEventListener("input", () => {
-    LAST_DEST_CITY = ""; LAST_DEST_STATE = ""; LAST_DEST_ZIPS = [];
-    hideZipPicker();
-  });
-
-  // Close picker on outside click
-  document.addEventListener("click", (e) => {
-    const picker = document.getElementById("zipPicker");
-    if (!picker) return;
-    if (e.target.closest("#zipPicker")) return;
-    if (e.target.closest("#destZip")) return;
-    hideZipPicker();
-  }, { capture: true });
-
-  // Close on scroll/resize
+  zipInput?.addEventListener("focus", () => { if (LAST_DEST_ZIPS.length && LAST_DEST_CITY && LAST_DEST_STATE) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
+  zipInput?.addEventListener("click",  () => { if (LAST_DEST_ZIPS.length && LAST_DEST_CITY && LAST_DEST_STATE) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
+  document.getElementById("destCity")?.addEventListener("input",  () => { LAST_DEST_CITY = ""; LAST_DEST_STATE = ""; LAST_DEST_ZIPS = []; hideZipPicker(); });
+  document.getElementById("destState")?.addEventListener("input", () => { LAST_DEST_CITY = ""; LAST_DEST_STATE = ""; LAST_DEST_ZIPS = []; hideZipPicker(); });
+  document.addEventListener("click", (e) => { const picker = document.getElementById("zipPicker"); if (!picker) return; if (e.target.closest("#zipPicker")) return; if (e.target.closest("#destZip")) return; hideZipPicker(); }, { capture: true });
   window.addEventListener("scroll", () => hideZipPicker(), { passive: true });
   window.addEventListener("resize", () => hideZipPicker(), { passive: true });
 }
-
 /* ─────────────────────────────────────────────────────────────────────────────
-   DESTINATION AUTOCOMPLETE + ZIP SUGGESTIONS (cached)
+   DESTINATION AUTOCOMPLETE + ZIP SUGGESTIONS
 ────────────────────────────────────────────────────────────────────────────── */
 let _destAutocomplete = null;
-
 function initDestinationAutocomplete() {
   if (!window.google?.maps?.places) return;
-
-  const cityEl = document.getElementById("destCity");
+  const cityEl  = document.getElementById("destCity");
   const stateEl = document.getElementById("destState");
   if (!cityEl || !stateEl) return;
-
   _destAutocomplete = new google.maps.places.Autocomplete(cityEl, {
-    types: ["(cities)"],
-    componentRestrictions: { country: ["us"] },
-    fields: ["address_components", "geometry", "name"]
+    types: ["(cities)"], componentRestrictions: { country: ["us"] }, fields: ["address_components","geometry","name"]
   });
-
   _destAutocomplete.addListener("place_changed", async () => {
     const place = _destAutocomplete.getPlace();
     if (!place?.address_components) return;
-
-    const getComp = (type, short=false) =>
-      place.address_components.find(c => c.types.includes(type))?.[short ? "short_name" : "long_name"] || "";
-
+    const getComp = (type, short=false) => place.address_components.find(c => c.types.includes(type))?.[short ? "short_name" : "long_name"] || "";
     const city  = getComp("locality") || place.name || "";
     const state = getComp("administrative_area_level_1", true) || "";
-
-    cityEl.value = city.toUpperCase();
+    cityEl.value  = city.toUpperCase();
     if (state) stateEl.value = state.toUpperCase();
-
     const zips = await suggestZipsForCity(place);
-
-    LAST_DEST_CITY = cityEl.value.trim();
+    LAST_DEST_CITY  = cityEl.value.trim();
     LAST_DEST_STATE = stateEl.value.trim();
-    LAST_DEST_ZIPS = zips;
-
+    LAST_DEST_ZIPS  = zips;
     showZipPicker(zips, LAST_DEST_CITY, LAST_DEST_STATE);
   });
 }
 
 async function suggestZipsForCity(place) {
   if (!place?.geometry?.location) return [];
-
-  const city = (document.getElementById("destCity")?.value || "").trim().toUpperCase();
+  const city  = (document.getElementById("destCity")?.value  || "").trim().toUpperCase();
   const state = (document.getElementById("destState")?.value || "").trim().toUpperCase();
-  const key = _zipCacheKey(city, state);
-
-  // Cache hit
+  const key   = _zipCacheKey(city, state);
   if (city && state && zipSuggestCache.has(key)) return zipSuggestCache.get(key);
-
   if (!window.google?.maps?.Geocoder) return [];
-
   const lat = place.geometry.location.lat();
   const lng = place.geometry.location.lng();
-
-  const points = [
-    {lat, lng},
-    {lat: lat + 0.06, lng},
-    {lat: lat - 0.06, lng},
-    {lat, lng: lng + 0.06},
-    {lat, lng: lng - 0.06},
-    {lat: lat + 0.04, lng: lng + 0.04},
-    {lat: lat - 0.04, lng: lng - 0.04},
-  ];
-
+  const points = [{lat,lng},{lat:lat+0.06,lng},{lat:lat-0.06,lng},{lat,lng:lng+0.06},{lat,lng:lng-0.06},{lat:lat+0.04,lng:lng+0.04},{lat:lat-0.04,lng:lng-0.04}];
   const geocoder = new google.maps.Geocoder();
   const found = new Set();
-
   for (const p of points) {
-    const results = await new Promise((resolve) => {
-      geocoder.geocode({ location: p }, (res, status) => {
-        if (status === "OK") resolve(res || []);
-        else resolve([]);
-      });
-    });
-
-    for (const r of results) {
-      const pc = r.address_components?.find(c => c.types.includes("postal_code"))?.long_name;
-      if (pc) found.add(pc);
-    }
+    const results = await new Promise((resolve) => { geocoder.geocode({ location: p }, (res, status) => { if (status === "OK") resolve(res||[]); else resolve([]); }); });
+    for (const r of results) { const pc = r.address_components?.find(c => c.types.includes("postal_code"))?.long_name; if (pc) found.add(pc); }
   }
-
   const zips = Array.from(found).slice(0, 20);
-
-  if (city && state && zips.length) {
-    zipSuggestCache.set(key, zips);
-    saveZipCacheToLocalStorage();
-  }
-
+  if (city && state && zips.length) { zipSuggestCache.set(key, zips); saveZipCacheToLocalStorage(); }
   return zips;
 }
 
@@ -572,55 +441,31 @@ function hideZipPicker() {
   const hint = document.getElementById("zipHint");
   if (hint) hint.style.display = "none";
 }
-
 function showZipPicker(zips, city, state) {
   hideZipPicker();
   if (!zips || zips.length === 0) return;
-
   const zipInput = document.getElementById("destZip");
-  const hint = document.getElementById("zipHint");
+  const hint     = document.getElementById("zipHint");
   if (!zipInput) return;
-
   if (hint) hint.style.display = "block";
-
   const items = zips.map(zip => ({ zip, label: `${city}, ${state}, ${zip}, USA` }));
-
   const picker = document.createElement("div");
-  picker.id = "zipPicker";
-  picker.className = "zip-picker";
-  picker.innerHTML = items.map(it => `
-    <div class="zip-item" data-zip="${it.zip}">
-      <strong>${it.label}</strong>
-    </div>
-  `).join("");
-
-  picker.addEventListener("click", (e) => {
-    const row = e.target.closest(".zip-item");
-    if (!row) return;
-    zipInput.value = row.getAttribute("data-zip") || "";
-    hideZipPicker();
-    zipInput.focus();
-  });
-
+  picker.id = "zipPicker"; picker.className = "zip-picker";
+  picker.innerHTML = items.map(it => `<div class="zip-item" data-zip="${it.zip}"><strong>${it.label}</strong></div>`).join("");
+  picker.addEventListener("click", (e) => { const row = e.target.closest(".zip-item"); if (!row) return; zipInput.value = row.getAttribute("data-zip") || ""; hideZipPicker(); zipInput.focus(); });
   document.body.appendChild(picker);
-
   const r = zipInput.getBoundingClientRect();
   const padding = 10;
   const spaceBelow = window.innerHeight - r.bottom - padding;
   const spaceAbove = r.top - padding;
-  const openDown = spaceBelow >= 260 || spaceBelow >= spaceAbove;
-
-  const maxHeight = Math.max(160, Math.min(560, openDown ? spaceBelow : spaceAbove));
+  const openDown   = spaceBelow >= 260 || spaceBelow >= spaceAbove;
+  const maxHeight  = Math.max(160, Math.min(560, openDown ? spaceBelow : spaceAbove));
   picker.style.maxHeight = `${maxHeight}px`;
   picker.style.width = `${r.width}px`;
-
   let left = r.left;
   left = Math.max(padding, Math.min(left, window.innerWidth - r.width - padding));
   picker.style.left = `${left}px`;
-
-  picker.style.top = openDown
-    ? `${Math.min(r.bottom + 6, window.innerHeight - maxHeight - padding)}px`
-    : `${Math.max(padding, r.top - maxHeight - 6)}px`;
+  picker.style.top  = openDown ? `${Math.min(r.bottom+6, window.innerHeight-maxHeight-padding)}px` : `${Math.max(padding, r.top-maxHeight-6)}px`;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -628,74 +473,53 @@ function showZipPicker(zips, city, state) {
 ────────────────────────────────────────────────────────────────────────────── */
 function onOriginChange() {
   const val = document.getElementById("originFacility").value;
-  if (!val) {
-    document.getElementById("originCity").value = "";
-    document.getElementById("originState").value = "";
-    document.getElementById("originZip").value = "";
-    return;
-  }
+  if (!val) { document.getElementById("originCity").value = ""; document.getElementById("originState").value = ""; document.getElementById("originZip").value = ""; return; }
   const parts = val.split(",");
-  document.getElementById("originCity").value = parts[0]?.trim() || "";
+  document.getElementById("originCity").value  = parts[0]?.trim() || "";
   document.getElementById("originState").value = parts[1]?.trim() || "";
-  document.getElementById("originZip").value = ORIGIN_ZIPS[val] || "";
+  document.getElementById("originZip").value   = ORIGIN_ZIPS[val] || "";
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SUBMIT
 ────────────────────────────────────────────────────────────────────────────── */
 async function submitQuote() {
-  const originFac = document.getElementById("originFacility").value.trim().toUpperCase();
-  const destCity  = document.getElementById("destCity").value.trim().toUpperCase();
-  const destState = document.getElementById("destState").value.trim().toUpperCase();
-  const destZip   = document.getElementById("destZip").value.trim().toUpperCase();
-  const equipment = document.getElementById("equipment").value;
-  const banner    = document.getElementById("errorBanner");
-
-  const hasOrigin = !!originFac;
-  const hasDest   = (destCity && destState) || destZip;
+  const originFac  = document.getElementById("originFacility").value.trim().toUpperCase();
+  const destCity   = document.getElementById("destCity").value.trim().toUpperCase();
+  const destState  = document.getElementById("destState").value.trim().toUpperCase();
+  const destZip    = document.getElementById("destZip").value.trim().toUpperCase();
+  const banner     = document.getElementById("errorBanner");
+  const hasOrigin  = !!originFac;
+  const hasDest    = (destCity && destState) || destZip;
   if (!hasOrigin || !hasDest) { banner.classList.add("show"); return; }
   banner.classList.remove("show");
   hideZipPicker();
-
   const btn = document.querySelector(".btn-primary");
   const origBtnText = btn.textContent;
-  btn.textContent = "Calculating…";
-  btn.disabled = true;
-
+  btn.textContent = "Calculating…"; btn.disabled = true;
   const originZip = document.getElementById("originZip").value.trim();
   const miles = await getMileageCached(originZip, originFac, destZip, destCity, destState);
-
-  btn.textContent = origBtnText;
-  btn.disabled = false;
-
-  const match = findRate(originFac, destCity, destState, destZip, equipment);
+  btn.textContent = origBtnText; btn.disabled = false;
+  const match = findRate(originFac, destCity, destState, destZip);
   displayResults(match, miles);
 }
-
 /* ─────────────────────────────────────────────────────────────────────────────
-   MILEAGE (DistanceMatrixService + cache)
+   MILEAGE
 ────────────────────────────────────────────────────────────────────────────── */
 function buildOriginString(originZip, originFac) {
   if (originZip) return originZip;
   const parts = originFac.split(",");
-  return `${(parts[0] || "").trim()} ${(parts[1] || "").trim()}`.trim();
+  return `${(parts[0]||"").trim()} ${(parts[1]||"").trim()}`.trim();
 }
-function buildDestString(destZip, destCity, destState) {
-  return destZip || `${destCity} ${destState}`.trim();
-}
+function buildDestString(destZip, destCity, destState) { return destZip || `${destCity} ${destState}`.trim(); }
 
 async function getMileageCached(originZip, originFac, destZip, destCity, destState) {
   const originStr = buildOriginString(originZip, originFac);
   const destStr   = buildDestString(destZip, destCity, destState);
-  const key = _makeMilesKey(originStr, destStr);
-
+  const key       = _makeMilesKey(originStr, destStr);
   if (milesCache.has(key)) return milesCache.get(key);
-
   const miles = await getMileageGoogle(originStr, destStr);
-  if (typeof miles === "number") {
-    milesCache.set(key, miles);
-    saveMilesToLocalStorage();
-  }
+  if (typeof miles === "number") { milesCache.set(key, miles); saveMilesToLocalStorage(); }
   return miles;
 }
 
@@ -704,44 +528,27 @@ async function getMileageGoogle(originStr, destStr) {
   try {
     await loadGoogleMapsJS();
     if (!window.google?.maps?.DistanceMatrixService) return null;
-
-    const service = new google.maps.DistanceMatrixService();
+    const service  = new google.maps.DistanceMatrixService();
     const response = await new Promise((resolve, reject) => {
-      service.getDistanceMatrix(
-        {
-          origins: [originStr],
-          destinations: [destStr],
-          travelMode: google.maps.TravelMode.DRIVING,
-          unitSystem: google.maps.UnitSystem.IMPERIAL,
-        },
-        (res, status) => status === "OK" ? resolve(res) : reject(new Error(status))
-      );
+      service.getDistanceMatrix({ origins: [originStr], destinations: [destStr], travelMode: google.maps.TravelMode.DRIVING, unitSystem: google.maps.UnitSystem.IMPERIAL }, (res, status) => status === "OK" ? resolve(res) : reject(new Error(status)));
     });
-
     const el = response?.rows?.[0]?.elements?.[0];
     if (!el || el.status !== "OK") return null;
-
     return Math.round(el.distance.value / 1609.34);
-  } catch (e) {
-    console.warn("Mileage lookup failed:", e);
-    return null;
-  }
+  } catch(e) { console.warn("Mileage lookup failed:", e); return null; }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    RATE MATCHING
+   Note: equipment filtering removed — mode (truck/rail) is now selected via UI toggle
 ────────────────────────────────────────────────────────────────────────────── */
 function nc(str) { return str ? str.split(",")[0].trim().toUpperCase() : ""; }
 function ns(str) { return str ? str.split(",")[0].trim().toUpperCase() : ""; }
 
-function findRate(originFac, destCity, destState, destZip, equipment) {
+function findRate(originFac, destCity, destState, destZip) {
   let best = null, bestScore = -1;
-
   for (const r of RATES) {
-    const [uom, rate, flat, currency, minCharge, bandMin, bandMax, equip,
-      origLoc, origStateField, origCountry, destLoc, destStateField, destPostal, destCountry] = r;
-
-    if (equipment && equip && equipment !== equip) continue;
+    const [uom, rate, flat, currency, minCharge, bandMin, bandMax, equip, origLoc, origStateField, origCountry, destLoc, destStateField, destPostal, destCountry] = r;
 
     // Origin
     let origScore = 0;
@@ -751,9 +558,7 @@ function findRate(originFac, destCity, destState, destZip, equipment) {
     } else if (origStateField) {
       const originStateVal = document.getElementById("originState").value.trim().toUpperCase();
       origScore = (originStateVal && ns(origStateField) === originStateVal) ? 2 : 1;
-    } else {
-      origScore = 1;
-    }
+    } else { origScore = 1; }
 
     // Destination
     let destScore = 0;
@@ -769,157 +574,130 @@ function findRate(originFac, destCity, destState, destZip, equipment) {
       if (destZip) {
         const dz = destZip.replace(/[^0-9A-Z]/g, "");
         const pz = postalCity.replace(/[^0-9A-Z]/g, "");
-        if (dz === pz || dz.startsWith(pz) || pz.startsWith(dz.substring(0, 3))) destScore = 3;
+        if (dz === pz || dz.startsWith(pz) || pz.startsWith(dz.substring(0,3))) destScore = 3;
         else if (postalState && destState && postalState === destState) destScore = 1;
         else continue;
-      } else if (destState && postalState === destState) {
-        destScore = 1;
-      } else continue;
+      } else if (destState && postalState === destState) { destScore = 1; }
+      else continue;
     } else if (destStateField) {
       if (destState && ns(destStateField) === destState) destScore = 2;
       else continue;
-    } else if (destCountry) {
-      destScore = 1;
-    }
+    } else if (destCountry) { destScore = 1; }
 
     const totalScore = origScore * 10 + destScore;
-    if (totalScore > bestScore) {
-      bestScore = totalScore;
-      best = { uom, rate, flat, currency, minCharge, equip, score: totalScore };
-    }
+    if (totalScore > bestScore) { bestScore = totalScore; best = { uom, rate, flat, currency, minCharge, equip, score: totalScore }; }
   }
-
   return best;
 }
-
 /* ─────────────────────────────────────────────────────────────────────────────
    DISPLAY
 ────────────────────────────────────────────────────────────────────────────── */
 function displayResults(match, miles) {
   currentMatch = match;
-
-  const badge         = document.getElementById("matchBadge");
+  const badge        = document.getElementById("matchBadge");
   const rateTypeBadge = document.getElementById("rateTypeBadge");
-  const content       = document.getElementById("resultsContent");
+  const content      = document.getElementById("resultsContent");
+  const modeLabel    = currentMode === "rail" ? "Rail" : "Truck";
 
   if (!match) {
     badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
     rateTypeBadge.textContent = "";
-    content.innerHTML = '<div class="no-results">No rate found for this origin/destination.</div>';
+    content.innerHTML = `<div class="no-results">No ${modeLabel.toLowerCase()} rate found for this origin/destination.</div>`;
     return;
   }
 
   const quality = match.score >= 30 ? "exact" : match.score >= 20 ? "partial" : "estimated";
-  badge.innerHTML = quality === "exact"
-    ? '<span class="match-badge match-exact">✓ Exact Match</span>'
-    : quality === "partial"
-    ? '<span class="match-badge match-partial">≈ Partial Match</span>'
-    : '<span class="match-badge match-none">~ Estimated</span>';
+  badge.innerHTML =
+    quality === "exact"   ? '<span class="match-badge match-exact">✓ Exact Match</span>' :
+    quality === "partial" ? '<span class="match-badge match-partial">≈ Partial Match</span>' :
+                            '<span class="match-badge match-none">~ Estimated</span>';
 
-  const isMI = match.uom === "MI";
-  rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}</span>`;
+  const isMI       = match.uom === "MI";
+  const modeBadge  = `<span class="match-badge ${currentMode === 'rail' ? 'mode-badge-rail' : 'mode-badge-truck'}">${currentMode === 'rail' ? '🚂' : '🚚'} ${modeLabel}</span>`;
+  rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}</span>${modeBadge}`;
 
-  const currency  = match.currency || "USD";
-  const gpRate    = isMI ? (match.rate || 0) : (match.flat || 0);
-  const minCharge = match.minCharge || 0;
-
+  const currency    = match.currency || "USD";
+  const gpRate      = isMI ? (match.rate || 0) : (match.flat || 0);
+  const minCharge   = match.minCharge || 0;
   const milesActual = (isMI && miles != null) ? miles : (isMI ? 500 : 0);
   const milesLabel  = (isMI && miles != null) ? miles : (isMI ? "~500 (est.)" : "—");
   const milesFailed = isMI && miles == null;
-
-  const gpAvg  = isMI ? gpRate * milesActual : gpRate;
-  const gpFuel = isMI ? gpRate * milesActual * 0.25 : gpRate * 0.18;
-
+  const gpAvg       = isMI ? gpRate * milesActual : gpRate;
+  const gpFuel      = isMI ? gpRate * milesActual * 0.25 : gpRate * 0.18;
   window._matchData = { isMI, gpRate, minCharge, currency, gpAvg, gpFuel };
 
   const milesNote = milesFailed
     ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
-    : (isMI && miles != null)
-    ? ' <span style="font-size:11px;color:#16a34a;font-style:italic;">via Google Maps</span>'
+    : (isMI && miles != null) ? ' <span style="font-size:11px;color:#16a34a;font-style:italic;">via Google Maps</span>'
     : "";
 
   content.innerHTML = `
-  <table>
-    <thead>
-      <tr>
-        <th>Item</th>
-        <th>GP Rate</th>
-        <th>Adjust Rate</th>
-        <th>% Difference</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Miles${milesNote}</td>
-        <td class="mono">${milesLabel}</td>
-        <td class="mono">${milesLabel}</td>
-        <td class="mono diff-zero">—</td>
-      </tr>
-      <tr>
-        <td>Rate Per Mile</td>
-        <td class="mono" id="gpRPM">${isMI ? fmt(gpRate, currency) : "—"}<span class="currency-badge">${currency}</span></td>
-        <td class="mono" id="adjRPM">${isMI ? fmt(0, currency) : "—"}</td>
-        <td class="mono diff-zero" id="diffRPM">—</td>
-      </tr>
-      <tr>
-        <td>Fuel Per Load</td>
-        <td class="mono" id="gpFuelCell">${fmt(gpFuel, currency)}<span class="currency-badge">${currency}</span></td>
-        <td class="mono" id="adjFuelCell">${fmt(gpFuel, currency)}</td>
-        <td class="mono diff-zero" id="diffFuel">—</td>
-      </tr>
-      <tr>
-        <td>Avg Rate Per Load</td>
-        <td class="mono" id="gpAvgCell">${fmt(gpAvg, currency)}<span class="currency-badge">${currency}</span></td>
-        <td class="mono" id="adjAvgCell">${fmt(0, currency)}</td>
-        <td class="mono diff-zero" id="diffAvg">—</td>
-      </tr>
-    </tbody>
-    <tfoot>
-      <tr class="total-row">
-        <td>Total Freight Per Load</td>
-        <td class="mono" id="totalGP">${fmt(0, currency)}</td>
-        <td class="mono" id="totalAdj">${fmt(0, currency)}</td>
-        <td class="mono diff-zero" id="totalDiff">—</td>
-      </tr>
-    </tfoot>
-  </table>`;
+    <table>
+      <thead><tr>
+        <th>Item</th><th>GP Rate</th><th>Adjust Rate</th><th>% Difference</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>Miles${milesNote}</td>
+          <td class="mono">${milesLabel}</td><td class="mono">${milesLabel}</td><td class="mono diff-zero">—</td>
+        </tr>
+        <tr>
+          <td>Rate Per Mile</td>
+          <td class="mono" id="gpRPM">${isMI ? fmt(gpRate, currency) : "—"}${isMI ? `<span class="currency-badge">${currency}</span>` : ""}</td>
+          <td class="mono" id="adjRPM">${isMI ? fmt(0, currency) : "—"}</td>
+          <td class="mono diff-zero" id="diffRPM">—</td>
+        </tr>
+        <tr>
+          <td>Fuel Per Load</td>
+          <td class="mono" id="gpFuelCell">${fmt(gpFuel, currency)}<span class="currency-badge">${currency}</span></td>
+          <td class="mono" id="adjFuelCell">${fmt(gpFuel, currency)}</td>
+          <td class="mono diff-zero" id="diffFuel">—</td>
+        </tr>
+        <tr>
+          <td>Avg Rate Per Load</td>
+          <td class="mono" id="gpAvgCell">${fmt(gpAvg, currency)}<span class="currency-badge">${currency}</span></td>
+          <td class="mono" id="adjAvgCell">${fmt(0, currency)}</td>
+          <td class="mono diff-zero" id="diffAvg">—</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td>Total Freight Per Load</td>
+          <td class="mono" id="totalGP">${fmt(0, currency)}</td>
+          <td class="mono" id="totalAdj">${fmt(0, currency)}</td>
+          <td class="mono diff-zero" id="totalDiff">—</td>
+        </tr>
+      </tfoot>
+    </table>`;
 
   document.getElementById("pctAdj").value = 0;
   recalc();
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   RECALC (Fuel stays GP; only RPM + Avg change)
+   RECALC
 ────────────────────────────────────────────────────────────────────────────── */
 function recalc() {
   if (!currentMatch || !window._matchData) return;
   const { isMI, gpRate, minCharge, currency, gpAvg, gpFuel } = window._matchData;
-
   const adjPct = parseFloat(document.getElementById("pctAdj")?.value) || 0;
   const mult   = 1 + adjPct / 100;
-
   const adjAvg  = gpAvg * mult;
   const adjRPM  = isMI ? gpRate * mult : 0;
-
   const gpTotal  = Math.max(gpAvg + gpFuel, minCharge);
   const adjTotal = Math.max(adjAvg + gpFuel, minCharge);
-
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = val; };
-
   if (isMI) {
-    set("adjRPM", fmt(adjRPM, currency));
+    set("adjRPM",  fmt(adjRPM, currency));
     set("diffRPM", `<span class="${dc(pct(adjRPM, gpRate))}">${fp(pct(adjRPM, gpRate))}</span>`);
   }
-
   set("adjFuelCell", fmt(gpFuel, currency));
-  set("diffFuel", `<span class="mono diff-zero">—</span>`);
-
-  set("adjAvgCell", fmt(adjAvg, currency));
-  set("diffAvg", `<span class="${dc(pct(adjAvg, gpAvg))}">${fp(pct(adjAvg, gpAvg))}</span>`);
-
-  set("totalGP", `${fmt(gpTotal, currency)}<span class="currency-badge">${currency}</span>`);
-  set("totalAdj", `${fmt(adjTotal, currency)}<span class="currency-badge">${currency}</span>`);
-  set("totalDiff", `<span class="${dc(pct(adjTotal, gpTotal))}">${fp(pct(adjTotal, gpTotal))}</span>`);
+  set("diffFuel",    `<span class="mono diff-zero">—</span>`);
+  set("adjAvgCell",  fmt(adjAvg, currency));
+  set("diffAvg",     `<span class="${dc(pct(adjAvg, gpAvg))}">${fp(pct(adjAvg, gpAvg))}</span>`);
+  set("totalGP",     `${fmt(gpTotal, currency)}<span class="currency-badge">${currency}</span>`);
+  set("totalAdj",    `${fmt(adjTotal, currency)}<span class="currency-badge">${currency}</span>`);
+  set("totalDiff",   `<span class="${dc(pct(adjTotal, gpTotal))}">${fp(pct(adjTotal, gpTotal))}</span>`);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -929,29 +707,21 @@ function fmt(val, currency) {
   if (val == null || isNaN(val)) return "$0.00";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: currency || "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 }
-function pct(a, b) { return (!b || b === 0) ? 0 : ((a - b) / Math.abs(b)) * 100; }
-function fp(val)   { return (val >= 0 ? "+" : "") + val.toFixed(2) + "%"; }
-function dc(val)   { return Math.abs(val) < 0.01 ? "mono diff-zero" : val > 0 ? "mono diff-positive" : "mono diff-negative"; }
+function pct(a, b) { return (!b || b===0) ? 0 : ((a-b)/Math.abs(b))*100; }
+function fp(val) { return (val >= 0 ? "+" : "") + val.toFixed(2) + "%"; }
+function dc(val) { return Math.abs(val) < 0.01 ? "mono diff-zero" : val > 0 ? "mono diff-positive" : "mono diff-negative"; }
 
 function clearForm() {
-  ["originFacility","originCity","originState","originZip","destCity","destState","destZip"].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = "";
-  });
+  ["originFacility","originCity","originState","originZip","destCity","destState","destZip"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
   hideZipPicker();
-  const eq = document.getElementById("equipment"); if (eq) eq.value = "";
   const pa = document.getElementById("pctAdj"); if (pa) pa.value = 0;
   document.getElementById("errorBanner")?.classList.remove("show");
-  document.getElementById("matchBadge")?.replaceChildren();
+  document.getElementById("matchBadge") && (document.getElementById("matchBadge").innerHTML = "");
   document.getElementById("rateTypeBadge") && (document.getElementById("rateTypeBadge").textContent = "");
   const rc = document.getElementById("resultsContent");
   if (rc) rc.innerHTML = '<div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>';
-
-  currentMatch = null;
-  window._matchData = null;
-
-  LAST_DEST_CITY = "";
-  LAST_DEST_STATE = "";
-  LAST_DEST_ZIPS = []; /* <-- important */
+  currentMatch = null; window._matchData = null;
+  LAST_DEST_CITY = ""; LAST_DEST_STATE = ""; LAST_DEST_ZIPS = [];
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
