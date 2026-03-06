@@ -95,33 +95,39 @@
   .btn-secondary { background: transparent; color: var(--text-muted); border: 1.5px solid var(--border); }
   .btn-secondary:hover { background: var(--bg); color: var(--text); }
 
-.seg {
-  display: inline-flex;
-  width: fit-content;          /* ✅ prevents the “empty box” */
-  border: 1.5px solid var(--border);
-  background: #fff;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-  justify-self: center;
+.seg{
+  display:inline-flex !important;
+  width:auto !important;
+  align-self:flex-start;
+  justify-self:start;
+  border:1.5px solid var(--border);
+  background:#fff;
+  border-radius:10px;
+  overflow:hidden;
+  box-shadow:0 1px 2px rgba(0,0,0,0.04);
 }
-  }
-  .seg button {
-    border: none;
-    background: transparent;
-    padding: 8px 14px;
-    font-weight: 700;
-    font-size: 13px;
-    cursor: pointer;
-    color: var(--text-muted);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .seg button.active {
-    background: #0f766e;
-    color: #fff;
-  }
+
+.seg button{
+  flex:0 0 auto !important;      /* ✅ stop stretching */
+  width:auto !important;         /* ✅ stop 100% width */
+  min-width:0 !important;
+  border:none;
+  background:transparent;
+  padding:8px 14px;
+  font-weight:700;
+  font-size:13px;
+  cursor:pointer;
+  color:var(--text-muted);
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  white-space:nowrap;
+}
+
+.seg button.active{
+  background:#0f766e;
+  color:#fff;
+}
 
   .results-header {
     display: flex; align-items: center; justify-content: space-between;
