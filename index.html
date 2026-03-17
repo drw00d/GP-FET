@@ -706,11 +706,14 @@ function railEquipGroup(code){
   const c = (code || "").trim().toUpperCase();
   if (!c) return "UNKNOWN";
 
-  // Boxcar
-  if (c.startsWith("B") || c === "H63") return "BOXCAR";
+  // Extract last 2 digits
+  const suffix = c.slice(-2);
 
-  // Centerbeam
-  if (c === "C73" || c === "H73") return "CENTERBEAM";
+  // Boxcar endings
+  if (["50","52","60","63"].includes(suffix)) return "BOXCAR";
+
+  // Centerbeam endings
+  if (suffix === "73") return "CENTERBEAM";
 
   return "OTHER";
 }
