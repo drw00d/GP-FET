@@ -703,10 +703,15 @@ async function getMileageGoogle(originStr, destStr){
 function nc(str){ return str ? str.split(",")[0].trim().toUpperCase() : ""; }
 
 function railEquipGroup(code){
-  const c = (code||"").trim().toUpperCase();
-  if(!c) return "UNKNOWN";
-  if(c.startsWith("B")) return "BOXCAR";
-  if(c.startsWith("C") || c.startsWith("H")) return "CENTERBEAM";
+  const c = (code || "").trim().toUpperCase();
+  if (!c) return "UNKNOWN";
+
+  // Boxcar
+  if (c.startsWith("B") || c === "H63") return "BOXCAR";
+
+  // Centerbeam
+  if (c === "C73" || c === "H73") return "CENTERBEAM";
+
   return "OTHER";
 }
 
