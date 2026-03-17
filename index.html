@@ -548,18 +548,29 @@ function clearResultsOnly() {
   window._matchData = null;
 }
 
-function refreshOriginOptions() {
+const RAIL_ORIGIN_LABELS = {
+  "ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
+  "GLADYS,VA,US": "BROOKNEAL / GLADYS / NARUNA, VA",
+  "CORRIGAN,TX,US": "CORRIGAN / MOSCOW, TX",
+};
+
+function refreshOriginOptions(){
   const originSelect = document.getElementById("originFacility");
-  if (!originSelect) return;
+  if(!originSelect) return;
 
   const origins = getOriginsForMode(SELECTED_MODE);
-  originSelect.innerHTML = `<option value="">-- Select Origin --</option>` +
-    origins.map(o => `<option value="${o}">${o}</option>`).join("");
 
-  // clear origin fields
-  document.getElementById("originCity").value = "";
-  document.getElementById("originState").value = "";
-  document.getElementById("originZip").value = "";
+  originSelect.innerHTML = `<option value="">-- Select Origin --</option>` +
+    origins.map(o => {
+      const label = (SELECTED_MODE === "RAIL" && RAIL_ORIGIN_LABELS[o])
+        ? RAIL_ORIGIN_LABELS[o]
+        : o;
+      return `<option value="${o}">${label}</option>`;
+    }).join("");
+
+  document.getElementById("originCity").value="";
+  document.getElementById("originState").value="";
+  document.getElementById("originZip").value="";
 }
 
 function getOriginsForMode(mode) {
