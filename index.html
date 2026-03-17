@@ -705,21 +705,33 @@ function nc(str){ return str ? str.split(",")[0].trim().toUpperCase() : ""; }
 function railEquipGroup(code){
   const c = (code || "").trim().toUpperCase();
   if (!c) return "UNKNOWN";
-
-  // Extract last 2 digits
   const suffix = c.slice(-2);
-
-  // Boxcar endings
   if (["50","52","60","63"].includes(suffix)) return "BOXCAR";
-
-  // Centerbeam endings
   if (suffix === "73") return "CENTERBEAM";
-
   return "OTHER";
 }
 
+function getBoxcarPriority(code){
+  const c = (code || "").trim().toUpperCase();
+  if (c.endsWith("63")) return 1;
+  if (c.endsWith("60")) return 2;
+  if (c.endsWith("50")) return 3;
+  if (c.endsWith("52")) return 4;
+  return 99;
+}
+
+function getCenterbeamPriority(code){
+  const c = (code || "").trim().toUpperCase();
+  if (c.endsWith("73")) {
+    if (c.startsWith("C")) return 1;
+    if (c.startsWith("H")) return 2;
+    return 3;
+  }
+  return 99;
+}
+
 function findRate(originFac, destCity, destState, destZip){
-  let best=null, bestScore=-1;
+  let best=null, bestScore=-1, bestPriority=999;
 
   for(const r of RATES){
     if(r.mode !== SELECTED_MODE) continue;
@@ -730,8 +742,22 @@ function findRate(originFac, destCity, destState, destZip){
     }
 
     const scored = scoreRate(r, originFac, destCity, destState, destZip);
-    if(scored > bestScore){
+    if(scored < 0) continue;
+
+    let priority = 0;
+    if(SELECTED_MODE === "RAIL"){
+      const grp = railEquipGroup(r.equip);
+      if(grp === "BOXCAR") priority = getBoxcarPriority(r.equip);
+      else if(grp === "CENTERBEAM") priority = getCenterbeamPriority(r.equip);
+      else priority = 999;
+    }
+
+    if(
+      scored > bestScore ||
+      (scored === bestScore && priority < bestPriority)
+    ){
       bestScore = scored;
+      bestPriority = priority;
       best = { ...r, score: scored };
     }
   }
@@ -739,17 +765,34 @@ function findRate(originFac, destCity, destState, destZip){
 }
 
 function findRateByGroup(originFac, destCity, destState, destZip, group){
-  let best=null, bestScore=-1;
+  let best = null;
+  let bestScore = -1;
+  let bestPriority = 999;
+
   for(const r of RATES){
     if(r.mode !== "RAIL") continue;
     if(railEquipGroup(r.equip) !== group) continue;
 
     const scored = scoreRate(r, originFac, destCity, destState, destZip);
-    if(scored > bestScore){
+    if(scored < 0) continue;
+
+    let priority = 0;
+    if(group === "BOXCAR"){
+      priority = getBoxcarPriority(r.equip);
+    } else if(group === "CENTERBEAM"){
+      priority = getCenterbeamPriority(r.equip);
+    }
+
+    if(
+      scored > bestScore ||
+      (scored === bestScore && priority < bestPriority)
+    ){
       bestScore = scored;
+      bestPriority = priority;
       best = { ...r, score: scored };
     }
   }
+
   return bestScore >= 0 ? best : null;
 }
 
