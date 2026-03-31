@@ -858,13 +858,14 @@ function displayResults(match, miles){
   const minCharge = Number(match.minCharge)||0;
 
   const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
+  const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : null;
   const milesLabel  = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
   const milesFailed = isMI && miles==null;
 
   const gpAvg = isMI ? gpRate*milesActual : gpRate;
   const gpFuel = isMI ? gpRate*milesActual*0.25 : gpRate*0.18;
 
-  window._matchData = { type:"single", isMI, gpRate, minCharge, currency, gpAvg, gpFuel };
+  window._matchData = { type:"single", isMI, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM };
 
   const milesNote = milesFailed
     ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
@@ -886,7 +887,7 @@ function displayResults(match, miles){
       </tr>
       <tr>
         <td>Rate Per Mile</td>
-        <td class="mono" id="gpRPM">${isMI ? fmt(gpRate,currency) : "—"}<span class="currency-badge">${currency}</span></td>
+        <td class="mono" id="gpRPM">${isMI ? fmt(gpRate,currency) : (derivedRPM != null ? fmt(derivedRPM,currency) : "—")}<span class="currency-badge">${currency}</span></td>
         <td class="mono" id="adjRPM">${isMI ? fmt(0,currency) : "—"}</td>
         <td class="mono diff-zero" id="diffRPM">—</td>
       </tr>
@@ -1056,18 +1057,19 @@ function recalc(){
   const mult = 1 + adjPct/100;
 
   if(window._matchData.type === "single"){
-    const { isMI, gpRate, minCharge, currency, gpAvg, gpFuel } = window._matchData;
+    const { isMI, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM } = window._matchData;
 
     const adjAvg = gpAvg * mult;
-    const adjRPM = isMI ? gpRate * mult : 0;
+    const adjRPM = isMI ? gpRate * mult : (derivedRPM != null ? derivedRPM * mult : 0);
     const gpTotal = Math.max(gpAvg + gpFuel, minCharge);
     const adjTotal = Math.max(adjAvg + gpFuel, minCharge);
 
     const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.innerHTML = val; };
 
-    if(isMI){
+    if(isMI || derivedRPM != null){
+      const baseRPM = isMI ? gpRate : derivedRPM;
       set("adjRPM", fmt(adjRPM,currency));
-      set("diffRPM", `<span class="${dc(pct(adjRPM,gpRate))}">${fp(pct(adjRPM,gpRate))}</span>`);
+      set("diffRPM", `<span class="${dc(pct(adjRPM,baseRPM))}">${fp(pct(adjRPM,baseRPM))}</span>`);
     }
     set("adjFuelCell", fmt(gpFuel,currency));
     set("diffFuel", `<span class="mono diff-zero">—</span>`);
