@@ -152,18 +152,95 @@
     font-size:13px;
     font-weight:600;
   }
+
+.truck-rail-compare{
+  margin:16px 24px 24px;
+  border:1.5px solid var(--border);
+  border-radius:12px;
+  overflow:hidden;
+  background:#fff;
+}
+.truck-rail-compare-header{
+  padding:12px 16px;
+  background:#1e3a5f;
+  color:#fff;
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.truck-rail-winner-banner{
+  padding:12px 16px;
+  font-size:13.5px;
+  font-weight:700;
+  text-align:center;
+  border-bottom:1.5px solid var(--border);
+}
+.truck-rail-winner-truck{ background:#dbeafe; color:#1e40af; }
+.truck-rail-winner-rail{ background:#dcfce7; color:#166534; }
+.truck-rail-winner-tie{ background:#fef9c3; color:#92400e; }
+.truck-rail-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+}
+.truck-rail-col{
+  padding:16px;
+}
+.truck-rail-col:first-child{ border-right:1.5px solid var(--border); }
+.truck-rail-col-title{
+  font-size:11px;
+  font-weight:700;
+  color:var(--label);
+  text-transform:uppercase;
+  letter-spacing:.07em;
+  margin-bottom:10px;
+  padding-bottom:6px;
+  border-bottom:1.5px solid var(--border);
+}
+.truck-rail-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:6px 0;
+  border-bottom:1px solid var(--border);
+  font-size:13px;
+}
+.truck-rail-row:last-child{ border-bottom:none; }
+.truck-rail-label{ color:var(--text-muted); }
+.truck-rail-value{ font-family:'DM Mono',monospace; font-weight:600; color:var(--text); }
+.truck-rail-total-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:9px 8px;
+  font-size:14px;
+  font-weight:700;
+  margin-top:8px;
+  border-top:2px solid var(--total-border);
+  background:var(--total-bg);
+  border-radius:6px;
+}
+.truck-rail-note{
+  font-size:11px;
+  color:var(--text-muted);
+  font-style:italic;
+  padding:8px 16px;
+  border-top:1px solid var(--border);
+  background:var(--row-alt);
+  text-align:center;
+}
 </style>
 </head>
 
 <body>
 <div class="header">
-  <div class="header-icon">🚚</div>
+  <div class="header-icon">ð</div>
   MattGPT Freight Estimate Tool
-  <span class="data-status" id="dataStatus">Loading rates…</span>
+  <span class="data-status" id="dataStatus">Loading ratesâ¦</span>
 </div>
 
 <div class="container" id="appContainer">
-  <div class="card"><div class="card-body"><div class="loading-overlay">Loading rate data, please wait…</div></div></div>
+  <div class="card"><div class="card-body"><div class="loading-overlay">Loading rate data, please waitâ¦</div></div></div>
 </div>
 
 <script>
@@ -299,7 +376,7 @@ async function loadRates(){
   }catch(e){
     document.getElementById("appContainer").innerHTML =
       '<div class="card"><div class="card-body"><div class="load-error">' +
-      '⚠️ Could not load rates.json — make sure the file is in the same folder as index.html.<br><small>' +
+      'â ï¸ Could not load rates.json â make sure the file is in the same folder as index.html.<br><small>' +
       e.message + '</small></div></div></div>';
     document.getElementById("dataStatus").textContent = "Load failed";
   }
@@ -318,8 +395,8 @@ function buildUI(){
         <div class="field" style="align-items:flex-start;">
           <label>Equipment Mode</label>
           <div class="seg">
-            <button id="modeTruck" class="${SELECTED_MODE==="TRUCK"?"active":""}" onclick="setMode('TRUCK')">🚚 Truck</button>
-            <button id="modeRail" class="${SELECTED_MODE==="RAIL"?"active":""}" onclick="setMode('RAIL')">🚂 Rail</button>
+            <button id="modeTruck" class="${SELECTED_MODE==="TRUCK"?"active":""}" onclick="setMode('TRUCK')">ð Truck</button>
+            <button id="modeRail" class="${SELECTED_MODE==="RAIL"?"active":""}" onclick="setMode('RAIL')">ð Rail</button>
           </div>
         </div>
 
@@ -454,6 +531,8 @@ function clearResultsOnly(){
   currentMatch = null;
   currentCompareMatches = null;
   window._matchData = null;
+  const existing = document.getElementById("truckRailCompareBox");
+  if(existing) existing.remove();
 }
 
 function refreshOriginOptions(){
@@ -642,7 +721,7 @@ async function submitQuote(){
 
   const btn = document.querySelector(".btn-primary");
   const origText = btn.textContent;
-  btn.textContent = "Calculating…";
+  btn.textContent = "Calculatingâ¦";
   btn.disabled = true;
 
   const originZip = document.getElementById("originZip").value.trim();
@@ -658,6 +737,7 @@ async function submitQuote(){
     return;
   }
 
+  window._lastQuery = { originFac, destCity, destState, destZip };
   const match = findRate(originFac, destCity, destState, destZip);
   displayResults(match, miles);
 }
@@ -846,9 +926,9 @@ function displayResults(match, miles){
 
   const quality = match.score>=30 ? "exact" : match.score>=20 ? "partial" : "estimated";
   badge.innerHTML = quality==="exact"
-    ? '<span class="match-badge match-exact">✓ Exact Match</span>'
+    ? '<span class="match-badge match-exact">â Exact Match</span>'
     : quality==="partial"
-    ? '<span class="match-badge match-partial">≈ Partial Match</span>'
+    ? '<span class="match-badge match-partial">â Partial Match</span>'
     : '<span class="match-badge match-none">~ Estimated</span>';
 
   const isMI = (match.uom||"").toString().toUpperCase() === "MI";
@@ -860,7 +940,7 @@ function displayResults(match, miles){
 
   const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
   const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : null;
-  const milesLabel  = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
+  const milesLabel  = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "â");
   const milesFailed = isMI && miles==null;
 
   const gpAvg = isMI ? gpRate*milesActual : gpRate;
@@ -869,7 +949,7 @@ function displayResults(match, miles){
   window._matchData = { type:"single", isMI, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM };
 
   const milesNote = milesFailed
-    ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
+    ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable â using estimate)</span>'
     : (isMI && miles!=null)
     ? ' <span style="font-size:11px;color:#16a34a;font-style:italic;">via Google Maps</span>'
     : '';
@@ -884,25 +964,25 @@ function displayResults(match, miles){
         <td>Miles${milesNote}</td>
         <td class="mono">${milesLabel}</td>
         <td class="mono">${milesLabel}</td>
-        <td class="mono diff-zero">—</td>
+        <td class="mono diff-zero">â</td>
       </tr>
       <tr>
         <td>Rate Per Mile</td>
-        <td class="mono" id="gpRPM">${isMI ? fmt(gpRate,currency) : (derivedRPM != null ? fmt(derivedRPM,currency) : "—")}<span class="currency-badge">${currency}</span></td>
-        <td class="mono" id="adjRPM">${isMI ? fmt(0,currency) : "—"}</td>
-        <td class="mono diff-zero" id="diffRPM">—</td>
+        <td class="mono" id="gpRPM">${isMI ? fmt(gpRate,currency) : (derivedRPM != null ? fmt(derivedRPM,currency) : "â")}<span class="currency-badge">${currency}</span></td>
+        <td class="mono" id="adjRPM">${isMI ? fmt(0,currency) : "â"}</td>
+        <td class="mono diff-zero" id="diffRPM">â</td>
       </tr>
       <tr>
         <td>Fuel Per Load</td>
         <td class="mono" id="gpFuelCell">${fmt(gpFuel,currency)}<span class="currency-badge">${currency}</span></td>
         <td class="mono" id="adjFuelCell">${fmt(gpFuel,currency)}</td>
-        <td class="mono diff-zero" id="diffFuel">—</td>
+        <td class="mono diff-zero" id="diffFuel">â</td>
       </tr>
       <tr>
         <td>Avg Rate Per Load</td>
         <td class="mono" id="gpAvgCell">${fmt(gpAvg,currency)}<span class="currency-badge">${currency}</span></td>
         <td class="mono" id="adjAvgCell">${fmt(0,currency)}</td>
-        <td class="mono diff-zero" id="diffAvg">—</td>
+        <td class="mono diff-zero" id="diffAvg">â</td>
       </tr>
     </tbody>
     <tfoot>
@@ -910,13 +990,31 @@ function displayResults(match, miles){
         <td>Total Freight Per Load</td>
         <td class="mono" id="totalGP">${fmt(0,currency)}</td>
         <td class="mono" id="totalAdj">${fmt(0,currency)}</td>
-        <td class="mono diff-zero" id="totalDiff">—</td>
+        <td class="mono diff-zero" id="totalDiff">â</td>
       </tr>
     </tfoot>
   </table>`;
 
   document.getElementById("pctAdj").value = 0;
   recalc();
+  // Append Truck vs Rail comparison box below the rates table
+  if(SELECTED_MODE === "TRUCK" && window._lastQuery){
+    const { originFac, destCity, destState, destZip } = window._lastQuery;
+    const railMatch = findBestRailForRoute(originFac, destCity, destState, destZip);
+    const compHtml = renderTruckRailComparison(match, railMatch, miles);
+    if(compHtml){
+      const resultsCard = document.getElementById("resultsCard");
+      let existing = document.getElementById("truckRailCompareBox");
+      if(existing) existing.remove();
+      const div = document.createElement("div");
+      div.id = "truckRailCompareBox";
+      div.innerHTML = compHtml;
+      resultsCard.appendChild(div);
+    }
+  } else {
+    const existing = document.getElementById("truckRailCompareBox");
+    if(existing) existing.remove();
+  }
 }
 
 function displayCompareResults(boxcar, centerbeam, miles){
@@ -934,7 +1032,7 @@ function displayCompareResults(boxcar, centerbeam, miles){
     return;
   }
 
-  badge.innerHTML = '<span class="match-badge match-partial">⇄ Comparing Both</span>';
+  badge.innerHTML = '<span class="match-badge match-partial">â Comparing Both</span>';
   rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">Rail Comparison</span>`;
 
   const winner = getCompareWinner(boxcar, centerbeam);
@@ -986,7 +1084,7 @@ function renderCompareCard(title, match, miles, key){
   const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
   const minCharge = Number(match.minCharge)||0;
   const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
-  const milesLabel  = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
+  const milesLabel  = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "â");
   const gpAvg = isMI ? gpRate*milesActual : gpRate;
   const gpFuel = isMI ? gpRate*milesActual*0.25 : gpRate*0.18;
   const total = Math.max(gpAvg + gpFuel, minCharge);
@@ -1003,25 +1101,25 @@ function renderCompareCard(title, match, miles, key){
             <td>Miles</td>
             <td class="mono">${milesLabel}</td>
             <td class="mono">${milesLabel}</td>
-            <td class="mono diff-zero">—</td>
+            <td class="mono diff-zero">â</td>
           </tr>
           <tr>
             <td>Rate Per Mile</td>
-            <td class="mono" id="${key}_gpRPM">${isMI ? fmt(gpRate,currency) : "—"}<span class="currency-badge">${currency}</span></td>
-            <td class="mono" id="${key}_adjRPM">${isMI ? fmt(0,currency) : "—"}</td>
-            <td class="mono diff-zero" id="${key}_diffRPM">—</td>
+            <td class="mono" id="${key}_gpRPM">${isMI ? fmt(gpRate,currency) : "â"}<span class="currency-badge">${currency}</span></td>
+            <td class="mono" id="${key}_adjRPM">${isMI ? fmt(0,currency) : "â"}</td>
+            <td class="mono diff-zero" id="${key}_diffRPM">â</td>
           </tr>
           <tr>
             <td>Fuel Per Load</td>
             <td class="mono" id="${key}_gpFuel">${fmt(gpFuel,currency)}<span class="currency-badge">${currency}</span></td>
             <td class="mono" id="${key}_adjFuel">${fmt(gpFuel,currency)}</td>
-            <td class="mono diff-zero" id="${key}_diffFuel">—</td>
+            <td class="mono diff-zero" id="${key}_diffFuel">â</td>
           </tr>
           <tr>
             <td>Avg Rate Per Load</td>
             <td class="mono" id="${key}_gpAvg">${fmt(gpAvg,currency)}<span class="currency-badge">${currency}</span></td>
             <td class="mono" id="${key}_adjAvg">${fmt(0,currency)}</td>
-            <td class="mono diff-zero" id="${key}_diffAvg">—</td>
+            <td class="mono diff-zero" id="${key}_diffAvg">â</td>
           </tr>
         </tbody>
         <tfoot>
@@ -1029,7 +1127,7 @@ function renderCompareCard(title, match, miles, key){
             <td>Total Freight Per Load</td>
             <td class="mono" id="${key}_totalGP">${fmt(total,currency)}<span class="currency-badge">${currency}</span></td>
             <td class="mono" id="${key}_totalAdj">${fmt(0,currency)}</td>
-            <td class="mono diff-zero" id="${key}_totalDiff">—</td>
+            <td class="mono diff-zero" id="${key}_totalDiff">â</td>
           </tr>
         </tfoot>
       </table>
@@ -1073,7 +1171,7 @@ function recalc(){
       set("diffRPM", `<span class="${dc(pct(adjRPM,baseRPM))}">${fp(pct(adjRPM,baseRPM))}</span>`);
     }
     set("adjFuelCell", fmt(gpFuel,currency));
-    set("diffFuel", `<span class="mono diff-zero">—</span>`);
+    set("diffFuel", `<span class="mono diff-zero">â</span>`);
     set("adjAvgCell", fmt(adjAvg,currency));
     set("diffAvg", `<span class="${dc(pct(adjAvg,gpAvg))}">${fp(pct(adjAvg,gpAvg))}</span>`);
     set("totalGP", `${fmt(gpTotal,currency)}<span class="currency-badge">${currency}</span>`);
@@ -1104,7 +1202,7 @@ function updateCompareCard(prefix, data, mult){
     set(`${prefix}_diffRPM`, `<span class="${dc(pct(adjRPM,gpRate))}">${fp(pct(adjRPM,gpRate))}</span>`);
   }
   set(`${prefix}_adjFuel`, fmt(gpFuel,currency));
-  set(`${prefix}_diffFuel`, `<span class="mono diff-zero">—</span>`);
+  set(`${prefix}_diffFuel`, `<span class="mono diff-zero">â</span>`);
   set(`${prefix}_adjAvg`, fmt(adjAvg,currency));
   set(`${prefix}_diffAvg`, `<span class="${dc(pct(adjAvg,gpAvg))}">${fp(pct(adjAvg,gpAvg))}</span>`);
   set(`${prefix}_totalAdj`, `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span>`);
@@ -1127,6 +1225,102 @@ function clearForm(){
   document.getElementById("errorBanner")?.classList.remove("show");
   clearResultsOnly();
   LAST_DEST_CITY=""; LAST_DEST_STATE=""; LAST_DEST_ZIPS=[];
+}
+
+
+// --- Truck vs Rail Comparison ---
+function findBestRailForRoute(originFac, destCity, destState, destZip){
+  // Find the best RAIL rate (any equipment) for this route
+  let best = null, bestScore = -1, bestPriority = 999;
+  for(const r of RATES){
+    if(r.mode !== "RAIL") continue;
+    const scored = scoreRate(r, originFac, destCity, destState, destZip);
+    if(scored < 0) continue;
+    const grp = railEquipGroup(r.equip);
+    let priority = 0;
+    if(grp === "BOXCAR") priority = getBoxcarPriority(r.equip);
+    else if(grp === "CENTERBEAM") priority = getCenterbeamPriority(r.equip);
+    else priority = 999;
+    if(scored > bestScore || (scored === bestScore && priority < bestPriority)){
+      bestScore = scored;
+      bestPriority = priority;
+      best = { ...r, score: scored };
+    }
+  }
+  return bestScore >= 0 ? best : null;
+}
+
+function renderTruckRailComparison(truckMatch, railMatch, miles){
+  // truckTotal = Total Freight Per Load for truck
+  // truckEq4   = truckTotal * 4  (4 trucks = 1 rail car rule of thumb)
+  // railTotal  = Total Freight Per Load for rail
+  if(!truckMatch) return "";
+
+  const currency = truckMatch.currency || "USD";
+  const isTruckMI = (truckMatch.uom||"").toString().toUpperCase() === "MI";
+  const truckGpRate = isTruckMI ? (Number(truckMatch.rate)||0) : (Number(truckMatch.flat)||0);
+  const truckMinCharge = Number(truckMatch.minCharge)||0;
+  const truckMilesActual = (isTruckMI && miles != null) ? miles : (isTruckMI ? 500 : 0);
+  const truckAvg = isTruckMI ? truckGpRate * truckMilesActual : truckGpRate;
+  const truckFuel = isTruckMI ? truckGpRate * truckMilesActual * 0.25 : truckGpRate * 0.18;
+  const truckTotal = Math.max(truckAvg + truckFuel, truckMinCharge);
+  const truckEq4 = truckTotal * 4;
+
+  let railTotal = null;
+  let railEquipLabel = "";
+  if(railMatch){
+    const isRailMI = (railMatch.uom||"").toString().toUpperCase() === "MI";
+    const railGpRate = isRailMI ? (Number(railMatch.rate)||0) : (Number(railMatch.flat)||0);
+    const railMinCharge = Number(railMatch.minCharge)||0;
+    const railMilesActual = (isRailMI && miles != null) ? miles : (isRailMI ? 500 : 0);
+    const railAvg = isRailMI ? railGpRate * railMilesActual : railGpRate;
+    const railFuel = isRailMI ? railGpRate * railMilesActual * 0.25 : railGpRate * 0.18;
+    railTotal = Math.max(railAvg + railFuel, railMinCharge);
+    railEquipLabel = railMatch.equip ? ` (${railMatch.equip})` : "";
+  }
+
+  let winnerClass = "", winnerText = "";
+  if(railTotal == null){
+    winnerClass = "truck-rail-winner-tie";
+    winnerText = "⚠️ No Rail Rate Found — Cannot Compare";
+  } else if(truckEq4 < railTotal){
+    winnerClass = "truck-rail-winner-truck";
+    winnerText = "🚚 Truck (×4) is the Lower Cost Option";
+  } else if(railTotal < truckEq4){
+    winnerClass = "truck-rail-winner-rail";
+    winnerText = "🚂 Rail is the Lower Cost Option";
+  } else {
+    winnerClass = "truck-rail-winner-tie";
+    winnerText = "= Tie — Both Options Are Equal Cost";
+  }
+
+  const railColHtml = railTotal != null ? `
+    <div class="truck-rail-col">
+      <div class="truck-rail-col-title">🚂 Rail${railEquipLabel}</div>
+      <div class="truck-rail-row"><span class="truck-rail-label">Total Per Rail Car</span><span class="truck-rail-value">${fmt(railTotal,currency)}</span></div>
+      <div class="truck-rail-total-row" id="trComp_railFinal"><span>Rail Total</span><span>${fmt(railTotal,currency)}</span></div>
+    </div>
+  ` : `
+    <div class="truck-rail-col">
+      <div class="truck-rail-col-title">🚂 Rail</div>
+      <div style="padding:24px 0;text-align:center;color:var(--text-muted);font-size:13px;">No rail rate found for this route.</div>
+    </div>
+  `;
+
+  return `<div class="truck-rail-compare">
+    <div class="truck-rail-compare-header">🔀 Truck vs. Rail Cost Comparison</div>
+    <div class="truck-rail-winner-banner ${winnerClass}">${winnerText}</div>
+    <div class="truck-rail-grid">
+      <div class="truck-rail-col">
+        <div class="truck-rail-col-title">🚚 Truck (×4 Equivalent)</div>
+        <div class="truck-rail-row"><span class="truck-rail-label">Total Per Truck Load</span><span class="truck-rail-value">${fmt(truckTotal,currency)}</span></div>
+        <div class="truck-rail-row"><span class="truck-rail-label">× 4 Trucks (1 Rail Car Equiv.)</span><span class="truck-rail-value">${fmt(truckEq4,currency)}</span></div>
+        <div class="truck-rail-total-row" id="trComp_truckFinal"><span>Truck ×4 Total</span><span>${fmt(truckEq4,currency)}</span></div>
+      </div>
+      ${railColHtml}
+    </div>
+    <div class="truck-rail-note">Rule of thumb: 4 truck loads = 1 rail car. Truck ×4 total vs. rail total shown above.</div>
+  </div>`;
 }
 
 loadRates();
