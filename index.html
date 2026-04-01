@@ -705,10 +705,9 @@ function nc(str){ return str ? str.split(",")[0].trim().toUpperCase() : ""; }
 function railEquipGroup(code){
   const c = (code || "").trim().toUpperCase();
   if (!c) return "UNKNOWN";
-  const suffix = c.slice(-2);
-  if (["50","52","60","63"].includes(suffix)) return "BOXCAR";
-  if (suffix === "73") return "CENTERBEAM";
-  return "OTHER";
+if (c.includes("BX") || c.includes("CH")) return "BOXCAR";
+  if (c.includes("RF")) return "CENTERBEAM";
+    return "OTHER";
 }
 
 function getBoxcarPriority(code){
