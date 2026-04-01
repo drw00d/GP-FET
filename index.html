@@ -12,7 +12,7 @@
     --accent:#1a56db; --accent-hover:#1246c5; --border:#e2e8f0; --border-focus:#93c5fd;
     --text:#1e293b; --text-muted:#64748b; --label:#475569; --input-bg:#f8fafc;
     --row-alt:#f8fafc; --total-bg:#fef9c3; --total-border:#eab308;
-    --error:#dc2626; --positive:#16a34a; --negative:#dc2626;hh
+    --error:#dc2626; --positive:#16a34a; --negative:#dc2626;
     --shadow:0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
   }
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -853,7 +853,7 @@ function displayResults(match, miles){
     : '<span class="match-badge match-none">~ Estimated</span>';
 
   const isMI = (match.uom||"").toString().toUpperCase() === "MI";
-  rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}</span>`; const info = EQUIPMENT_INFO[g]; const equipHtml = info ? `<span style="font-size:11.5px;color:#64748b;margin-left:8px;font-weight:600;">${info.clientEqpNum}</span><span style="font-size:11.5px;color:#94a3b8;margin-left:6px;">${info.eqpDesc}</span>` : ""; return `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}</span>` + equipHtml; })();
+  rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}</span>`;
 
   const currency = match.currency || "USD";
   const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
@@ -994,7 +994,7 @@ function renderCompareCard(title, match, miles, key){
 
   return `
     <div class="compare-card">
-      <div class="compare-title">${title}${match.equip ? ` <span style="color:#64748b;font-weight:600;">(${match.equip})</span>` : ""} const info=EQUIPMENT_INFO[g]; return info ? ` <span style="color:#64748b;font-weight:600;">${info.clientEqpNum}</span><span style="color:#94a3b8;font-size:11.5px;margin-left:6px;">${info.eqpDesc}</span>` : (match.equip ? ` <span style="color:#64748b;font-weight:600;">(${match.equip})</span>` : ""); })()} ? ` <span style="color:#64748b;font-weight:600;">(${match.equip})</span>` : ""}</div>
+      <div class="compare-title">${title}${match.equip ? ` <span style="color:#64748b;font-weight:600;">(${match.equip})</span>` : ""}</div>
       <table>
         <thead>
           <tr><th>Item</th><th>GP Rate</th><th>Adjust Rate</th><th>% Difference</th></tr>
