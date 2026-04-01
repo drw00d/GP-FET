@@ -1177,6 +1177,42 @@ function recalc(){
     set("totalGP", `${fmt(gpTotal,currency)}<span class="currency-badge">${currency}</span>`);
     set("totalAdj", `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span>`);
     set("totalDiff", `<span class="${dc(pct(adjTotal,gpTotal))}">${fp(pct(adjTotal,gpTotal))}</span>`);
+
+    // Update Truck vs Rail comparison box with adjusted total
+    const compBox = document.getElementById("truckRailCompareBox");
+    if(compBox && window._lastQuery){
+      const adjEq4 = adjTotal * 4;
+      // Get current rail total from the DOM (it doesn't change with % adj)
+      const railFinalEl = document.getElementById("trComp_railFinal");
+      const railTotalText = railFinalEl ? railFinalEl.querySelector("span:last-child")?.textContent : null;
+      const railTotalVal = railTotalText ? parseFloat(railTotalText.replace(/[^0-9.-]/g,"")) : null;
+
+      // Update truck side values
+      const truckTotalEl = document.getElementById("trComp_truckTotal");
+      if(truckTotalEl) truckTotalEl.textContent = fmt(adjTotal, currency);
+      const truckEq4El = document.getElementById("trComp_truckEq4");
+      if(truckEq4El) truckEq4El.textContent = fmt(adjEq4, currency);
+      const truckFinalEl = document.getElementById("trComp_truckFinal");
+      if(truckFinalEl){
+        const spans = truckFinalEl.querySelectorAll("span");
+        if(spans[1]) spans[1].textContent = fmt(adjEq4, currency);
+      }
+
+      // Update winner banner
+      const banner = compBox.querySelector(".truck-rail-winner-banner");
+      if(banner && railTotalVal != null){
+        if(adjEq4 < railTotalVal){
+          banner.className = "truck-rail-winner-banner truck-rail-winner-truck";
+          banner.textContent = "Truck (x4) is the Lower Cost Option";
+        } else if(railTotalVal < adjEq4){
+          banner.className = "truck-rail-winner-banner truck-rail-winner-rail";
+          banner.textContent = "Rail is the Lower Cost Option";
+        } else {
+          banner.className = "truck-rail-winner-banner truck-rail-winner-tie";
+          banner.textContent = "Tie -- Both Options Are Equal Cost";
+        }
+      }
+    }
     return;
   }
 
@@ -1307,8 +1343,8 @@ function renderTruckRailComparison(truckMatch, railMatch, miles){
     <div class="truck-rail-grid">
       <div class="truck-rail-col">
         <div class="truck-rail-col-title">Truck (x4 Equivalent)</div>
-        <div class="truck-rail-row"><span class="truck-rail-label">Total Per Truck Load</span><span class="truck-rail-value">${fmt(truckTotal,currency)}</span></div>
-        <div class="truck-rail-row"><span class="truck-rail-label">x 4 Trucks (1 Rail Car Equiv.)</span><span class="truck-rail-value">${fmt(truckEq4,currency)}</span></div>
+        <div class="truck-rail-row"><span class="truck-rail-label">Total Per Truck Load</span><span class="truck-rail-value" id="trComp_truckTotal">${fmt(truckTotal,currency)}</span></div>
+        <div class="truck-rail-row"><span class="truck-rail-label">x 4 Trucks (1 Rail Car Equiv.)</span><span class="truck-rail-value" id="trComp_truckEq4">${fmt(truckEq4,currency)}</span></div>
         <div class="truck-rail-total-row"><span>Truck x4 Total</span><span>${fmt(truckEq4,currency)}</span></div>
       </div>
       ${railColHtml}
