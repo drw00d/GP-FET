@@ -531,6 +531,7 @@ function clearResultsOnly(){
   currentMatch = null;
   currentCompareMatches = null;
   window._matchData = null;
+  window._lastRailTotal = null;
   const existing = document.getElementById("truckRailCompareBox");
   if(existing) existing.remove();
 }
@@ -1001,6 +1002,18 @@ function displayResults(match, miles){
   if(SELECTED_MODE === "TRUCK" && window._lastQuery){
     const { originFac, destCity, destState, destZip } = window._lastQuery;
     const railMatch = findBestRailForRoute(originFac, destCity, destState, destZip);
+    // Store rail total for use in recalc()
+    if(railMatch){
+      const isRailMI = (railMatch.uom||"").toString().toUpperCase() === "MI";
+      const railGpRate = isRailMI ? (Number(railMatch.rate)||0) : (Number(railMatch.flat)||0);
+      const railMinCharge = Number(railMatch.minCharge)||0;
+      const railMilesActual = (isRailMI && miles != null) ? miles : (isRailMI ? 500 : 0);
+      const railAvg = isRailMI ? railGpRate * railMilesActual : railGpRate;
+      const railFuel = isRailMI ? railGpRate * railMilesActual * 0.25 : railGpRate * 0.18;
+      window._lastRailTotal = Math.max(railAvg + railFuel, railMinCharge);
+    } else {
+      window._lastRailTotal = null;
+    }
     const compHtml = renderTruckRailComparison(match, railMatch, miles);
     if(compHtml){
       const resultsCard = document.getElementById("resultsCard");
@@ -1183,20 +1196,14 @@ function recalc(){
     if(compBox && window._lastQuery){
       const adjEq4 = adjTotal * 4;
       // Get current rail total from the DOM (it doesn't change with % adj)
-      const railFinalEl = document.getElementById("trComp_railFinal");
-      const railTotalText = railFinalEl ? railFinalEl.querySelector("span:last-child")?.textContent : null;
-      const railTotalVal = railTotalText ? parseFloat(railTotalText.replace(/[^0-9.-]/g,"")) : null;
-
       // Update truck side values
-      const truckTotalEl = document.getElementById("trComp_truckTotal");
-      if(truckTotalEl) truckTotalEl.textContent = fmt(adjTotal, currency);
-      const truckEq4El = document.getElementById("trComp_truckEq4");
-      if(truckEq4El) truckEq4El.textContent = fmt(adjEq4, currency);
-      const truckFinalEl = document.getElementById("trComp_truckFinal");
-      if(truckFinalEl){
-        const spans = truckFinalEl.querySelectorAll("span");
-        if(spans[1]) spans[1].textContent = fmt(adjEq4, currency);
-      }
+      const setEl = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+      setEl("trComp_truckTotal", fmt(adjTotal, currency));
+      setEl("trComp_truckEq4", fmt(adjEq4, currency));
+      setEl("trComp_truckFinalVal", fmt(adjEq4, currency));
+
+      // Get rail total from stored _matchData
+      const railTotalVal = window._lastRailTotal || null;
 
       // Update winner banner
       const banner = compBox.querySelector(".truck-rail-winner-banner");
@@ -1328,7 +1335,7 @@ function renderTruckRailComparison(truckMatch, railMatch, miles){
     <div class="truck-rail-col">
       <div class="truck-rail-col-title">Rail${railEquipLabel}</div>
       <div class="truck-rail-row"><span class="truck-rail-label">Total Per Rail Car</span><span class="truck-rail-value">${fmt(railTotal,currency)}</span></div>
-      <div class="truck-rail-total-row"><span>Rail Total</span><span>${fmt(railTotal,currency)}</span></div>
+      <div class="truck-rail-total-row" id="trComp_railFinal"><span>Rail Total</span><span id="trComp_railFinalVal">${fmt(railTotal,currency)}</span></div>
     </div>
   ` : `
     <div class="truck-rail-col">
@@ -1345,7 +1352,7 @@ function renderTruckRailComparison(truckMatch, railMatch, miles){
         <div class="truck-rail-col-title">Truck (x4 Equivalent)</div>
         <div class="truck-rail-row"><span class="truck-rail-label">Total Per Truck Load</span><span class="truck-rail-value" id="trComp_truckTotal">${fmt(truckTotal,currency)}</span></div>
         <div class="truck-rail-row"><span class="truck-rail-label">x 4 Trucks (1 Rail Car Equiv.)</span><span class="truck-rail-value" id="trComp_truckEq4">${fmt(truckEq4,currency)}</span></div>
-        <div class="truck-rail-total-row"><span>Truck x4 Total</span><span>${fmt(truckEq4,currency)}</span></div>
+        <div class="truck-rail-total-row" id="trComp_truckFinal"><span>Truck x4 Total</span><span id="trComp_truckFinalVal">${fmt(truckEq4,currency)}</span></div>
       </div>
       ${railColHtml}
     </div>
