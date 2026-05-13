@@ -5,259 +5,265 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>MattGPT Freight Estimate Tool</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-
 <style>
-  :root{
-    --bg:#f0f2f5; --panel:#fff; --header-bg:#1a2332; --header-text:#fff;
-    --accent:#1a56db; --accent-hover:#1246c5; --border:#e2e8f0; --border-focus:#93c5fd;
-    --text:#1e293b; --text-muted:#64748b; --label:#475569; --input-bg:#f8fafc;
-    --row-alt:#f8fafc; --total-bg:#fef9c3; --total-border:#eab308;
-    --error:#dc2626; --positive:#16a34a; --negative:#dc2626;
-    --shadow:0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  }
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
-  .header{
-    background:var(--header-bg); color:var(--header-text); padding:14px 28px;
-    font-size:15px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
-    display:flex; align-items:center; gap:10px;
-  }
-  .header-icon{
-    width:28px;height:28px;background:var(--accent);border-radius:6px;
-    display:flex;align-items:center;justify-content:center;font-size:14px;
-  }
-  .container{max-width:980px;margin:24px auto;padding:0 16px;display:flex;flex-direction:column;gap:16px;}
-  .card{background:var(--panel);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;}
-  .card-body{padding:20px 24px;}
-  .loading-overlay{text-align:center;padding:40px 24px;color:var(--text-muted);font-size:14px;}
-  .load-error{
-    background:#fef2f2;border-left:3px solid var(--error);color:var(--error);
-    padding:14px 20px;font-size:13px;font-weight:500;border-radius:4px;
-  }
-  .error-banner{
-    background:#fef2f2;border-left:3px solid var(--error);color:var(--error);
-    padding:10px 16px;font-size:13px;font-weight:500;margin-bottom:16px;border-radius:4px;display:none;
-  }
-  .error-banner.show{display:block;}
-  .form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px;}
-  .form-row-5{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px;margin-bottom:16px;}
-  .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
-  .field{display:flex;flex-direction:column;gap:5px;}
-  .field label{font-size:11px;font-weight:600;color:var(--label);text-transform:uppercase;letter-spacing:.06em;}
-  .field input,.field select{
-    background:var(--input-bg);border:1.5px solid var(--border);border-radius:7px;
-    padding:8px 11px;font-family:inherit;font-size:13.5px;color:var(--text);
-    transition:border-color .15s,box-shadow .15s;outline:none;width:100%;
-  }
-  .field input:focus,.field select:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(147,197,253,.25);}
-  .field input::placeholder{color:#94a3b8;}
-  .field input[readonly]{background:#f1f5f9;color:var(--text-muted);cursor:default;}
-  .section-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;}
-  .btn-row{display:flex;gap:10px;align-items:center;}
-  .btn{padding:9px 22px;border-radius:8px;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
-  .btn-primary{background:var(--accent);color:#fff;}
-  .btn-primary:hover{background:var(--accent-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(26,86,219,.3);}
-  .btn-primary:disabled{opacity:.75;cursor:not-allowed;transform:none;box-shadow:none;}
-  .btn-secondary{background:transparent;color:var(--text-muted);border:1.5px solid var(--border);}
-  .btn-secondary:hover{background:var(--bg);color:var(--text);}
-
-  .seg{
-    display:inline-flex;
-    width:max-content;
-    border:1.5px solid var(--border);
-    background:var(--input-bg);
-    border-radius:10px;
-    overflow:hidden;
-    box-shadow:0 1px 2px rgba(0,0,0,0.04);
-    padding:2px;
-  }
-  .seg button{
-    appearance:none;border:0;background:transparent;
-    padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;color:var(--text-muted);
-    display:inline-flex;align-items:center;gap:8px;white-space:nowrap;border-radius:8px;
-  }
-  .seg button.active{background:#0f766e;color:#fff;}
-
-  .results-header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1.5px solid var(--border);}
-  .results-header-left{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
-  .adj-panel{padding:14px 24px;border-bottom:1.5px solid var(--border);display:flex;align-items:center;gap:14px;}
-  .adj-panel label{font-size:13px;font-weight:600;color:var(--label);white-space:nowrap;}
-  .adj-input-wrap{display:flex;align-items:center;gap:6px;}
-  .adj-input-wrap span{font-size:14px;font-weight:600;color:var(--text-muted);}
-  .adj-input{
-    background:var(--input-bg);border:1.5px solid var(--border);border-radius:7px;
-    padding:7px 10px;font-family:'DM Mono',monospace;font-size:14px;width:100px;outline:none;color:var(--text);
-    text-align:right;transition:border-color .15s,box-shadow .15s;
-  }
-  .adj-input:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(147,197,253,.2);}
-  .adj-hint{font-size:12px;color:var(--text-muted);font-style:italic;}
-  table{width:100%;border-collapse:collapse;}
-  thead tr{border-bottom:2px solid var(--border);}
-  thead th{padding:10px 24px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;}
-  thead th:first-child{text-align:left;}
-  tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
-  tbody tr:nth-child(even){background:var(--row-alt);}
-  tbody tr:hover{background:#f1f5fb;}
-  tbody td{padding:13px 24px;font-size:13.5px;text-align:right;color:var(--text);}
-  tbody td:first-child{text-align:left;font-weight:500;}
-  .mono{font-family:'DM Mono',monospace;}
-  .diff-positive{color:var(--positive);font-weight:600;}
-  .diff-negative{color:var(--negative);font-weight:600;}
-  .diff-zero{color:var(--text-muted);}
-  tfoot .total-row td{background:var(--total-bg)!important;border-top:2px solid var(--total-border);font-weight:700;font-size:14px;padding:14px 24px;}
-  .no-results{text-align:center;padding:40px 24px;color:var(--text-muted);font-size:14px;}
-  .match-badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;margin-left:10px;}
-  .match-exact{background:#dcfce7;color:#15803d;}
-  .match-partial{background:#fef3c7;color:#92400e;}
-  .match-none{background:#fee2e2;color:#991b1b;}
-  .currency-badge{font-size:10px;font-weight:700;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle;}
-  .data-status{font-size:11px;color:var(--text-muted);margin-left:auto;font-style:italic;}
-
-  .zip-picker{
-    position:fixed;background:#fff;border:1.5px solid var(--border);border-radius:12px;
-    box-shadow:0 16px 40px rgba(0,0,0,0.16);overflow:auto;z-index:999999;max-height:420px;
-  }
-  .zip-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;}
-  .zip-item:last-child{border-bottom:none;}
-  .zip-item:hover{background:#f1f5fb;}
-  .zip-hint{font-size:11px;color:var(--text-muted);margin-top:6px;font-style:italic;}
-
-  .compare-grid{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:16px;
-    padding:16px 24px 24px;
-  }
-  .compare-card{
-    border:1.5px solid var(--border);
-    border-radius:12px;
-    overflow:hidden;
-    background:#fff;
-  }
-  .compare-title{
-    padding:12px 16px;
-    border-bottom:1.5px solid var(--border);
-    font-size:13px;
-    font-weight:700;
-    color:var(--text);
-    background:var(--input-bg);
-  }
-  .compare-winner{
-    margin:0 24px 16px;
-    padding:12px 14px;
-    background:#ecfdf5;
-    border:1px solid #bbf7d0;
-    color:#166534;
-    border-radius:10px;
-    font-size:13px;
-    font-weight:600;
-  }
-
+:root{
+--bg:#f0f2f5; --panel:#fff; --header-bg:#1a2332; --header-text:#fff;
+--accent:#1a56db; --accent-hover:#1246c5; --border:#e2e8f0; --border-focus:#93c5fd;
+--text:#1e293b; --text-muted:#64748b; --label:#475569; --input-bg:#f8fafc;
+--row-alt:#f8fafc; --total-bg:#fef9c3; --total-border:#eab308;
+--error:#dc2626; --positive:#16a34a; --negative:#dc2626;
+--shadow:0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.header{
+background:var(--header-bg); color:var(--header-text); padding:14px 28px;
+font-size:15px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+display:flex; align-items:center; gap:10px;
+}
+.header-icon{
+width:28px;height:28px;background:var(--accent);border-radius:6px;
+display:flex;align-items:center;justify-content:center;font-size:14px;
+}
+.container{max-width:980px;margin:24px auto;padding:0 16px;display:flex;flex-direction:column;gap:16px;}
+.card{background:var(--panel);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;}
+.card-body{padding:20px 24px;}
+.loading-overlay{text-align:center;padding:40px 24px;color:var(--text-muted);font-size:14px;}
+.load-error{
+background:#fef2f2;border-left:3px solid var(--error);color:var(--error);
+padding:14px 20px;font-size:13px;font-weight:500;border-radius:4px;
+}
+.error-banner{
+background:#fef2f2;border-left:3px solid var(--error);color:var(--error);
+padding:10px 16px;font-size:13px;font-weight:500;margin-bottom:16px;border-radius:4px;display:none;
+}
+.error-banner.show{display:block;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px;}
+.form-row-5{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px;margin-bottom:16px;}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+.field{display:flex;flex-direction:column;gap:5px;}
+.field label{font-size:11px;font-weight:600;color:var(--label);text-transform:uppercase;letter-spacing:.06em;}
+.field input,.field select{
+background:var(--input-bg);border:1.5px solid var(--border);border-radius:7px;
+padding:8px 11px;font-family:inherit;font-size:13.5px;color:var(--text);
+transition:border-color .15s,box-shadow .15s;outline:none;width:100%;
+}
+.field input:focus,.field select:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(147,197,253,.25);}
+.field input::placeholder{color:#94a3b8;}
+.field input[readonly]{background:#f1f5f9;color:var(--text-muted);cursor:default;}
+.section-label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;}
+.btn-row{display:flex;gap:10px;align-items:center;}
+.btn{padding:9px 22px;border-radius:8px;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:var(--accent-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(26,86,219,.3);}
+.btn-primary:disabled{opacity:.75;cursor:not-allowed;transform:none;box-shadow:none;}
+.btn-secondary{background:transparent;color:var(--text-muted);border:1.5px solid var(--border);}
+.btn-secondary:hover{background:var(--bg);color:var(--text);}
+.seg{
+display:inline-flex;
+width:max-content;
+border:1.5px solid var(--border);
+background:var(--input-bg);
+border-radius:10px;
+overflow:hidden;
+box-shadow:0 1px 2px rgba(0,0,0,0.04);
+padding:2px;
+}
+.seg button{
+appearance:none;border:0;background:transparent;
+padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;color:var(--text-muted);
+display:inline-flex;align-items:center;gap:8px;white-space:nowrap;border-radius:8px;
+}
+.seg button.active{background:#0f766e;color:#fff;}
+.results-header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1.5px solid var(--border);}
+.results-header-left{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+.adj-panel{padding:14px 24px;border-bottom:1.5px solid var(--border);display:flex;align-items:center;gap:14px;}
+.adj-panel label{font-size:13px;font-weight:600;color:var(--label);white-space:nowrap;}
+.adj-input-wrap{display:flex;align-items:center;gap:6px;}
+.adj-input-wrap span{font-size:14px;font-weight:600;color:var(--text-muted);}
+.adj-input{
+background:var(--input-bg);border:1.5px solid var(--border);border-radius:7px;
+padding:7px 10px;font-family:'DM Mono',monospace;font-size:14px;width:100px;outline:none;color:var(--text);
+text-align:right;transition:border-color .15s,box-shadow .15s;
+}
+.adj-input:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(147,197,253,.2);}
+.adj-hint{font-size:12px;color:var(--text-muted);font-style:italic;}
+table{width:100%;border-collapse:collapse;}
+thead tr{border-bottom:2px solid var(--border);}
+thead th{padding:10px 24px;text-align:right;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;}
+thead th:first-child{text-align:left;}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
+tbody tr:nth-child(even){background:var(--row-alt);}
+tbody tr:hover{background:#f1f5fb;}
+tbody td{padding:13px 24px;font-size:13.5px;text-align:right;color:var(--text);}
+tbody td:first-child{text-align:left;font-weight:500;}
+.mono{font-family:'DM Mono',monospace;}
+.diff-positive{color:var(--positive);font-weight:600;}
+.diff-negative{color:var(--negative);font-weight:600;}
+.diff-zero{color:var(--text-muted);}
+tfoot .total-row td{background:var(--total-bg)!important;border-top:2px solid var(--total-border);font-weight:700;font-size:14px;padding:14px 24px;}
+.no-results{text-align:center;padding:40px 24px;color:var(--text-muted);font-size:14px;}
+.match-badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;margin-left:10px;}
+.match-exact{background:#dcfce7;color:#15803d;}
+.match-partial{background:#fef3c7;color:#92400e;}
+.match-none{background:#fee2e2;color:#991b1b;}
+.currency-badge{font-size:10px;font-weight:700;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle;}
+.data-status{font-size:11px;color:var(--text-muted);margin-left:auto;font-style:italic;}
+.zip-picker{
+position:fixed;background:#fff;border:1.5px solid var(--border);border-radius:12px;
+box-shadow:0 16px 40px rgba(0,0,0,0.16);overflow:auto;z-index:999999;max-height:420px;
+}
+.zip-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;}
+.zip-item:last-child{border-bottom:none;}
+.zip-item:hover{background:#f1f5fb;}
+.zip-hint{font-size:11px;color:var(--text-muted);margin-top:6px;font-style:italic;}
+.compare-grid{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:16px;
+padding:16px 24px 24px;
+}
+.compare-card{
+border:1.5px solid var(--border);
+border-radius:12px;
+overflow:hidden;
+background:#fff;
+}
+.compare-title{
+padding:12px 16px;
+border-bottom:1.5px solid var(--border);
+font-size:13px;
+font-weight:700;
+color:var(--text);
+background:var(--input-bg);
+}
+.compare-winner{
+margin:0 24px 16px;
+padding:12px 14px;
+background:#ecfdf5;
+border:1px solid #bbf7d0;
+color:#166534;
+border-radius:10px;
+font-size:13px;
+font-weight:600;
+}
 .truck-rail-compare{
-  margin:16px 24px 24px;
-  border:1.5px solid var(--border);
-  border-radius:12px;
-  overflow:hidden;
-  background:#fff;
+margin:16px 24px 24px;
+border:1.5px solid var(--border);
+border-radius:12px;
+overflow:hidden;
+background:#fff;
 }
 .truck-rail-compare-header{
-  padding:12px 16px;
-  background:#1e3a5f;
-  color:#fff;
-  font-size:13px;
-  font-weight:700;
-  letter-spacing:.04em;
-  text-transform:uppercase;
+padding:12px 16px;
+background:#1e3a5f;
+color:#fff;
+font-size:13px;
+font-weight:700;
+letter-spacing:.04em;
+text-transform:uppercase;
 }
 .truck-rail-winner-banner{
-  padding:12px 16px;
-  font-size:13.5px;
-  font-weight:700;
-  text-align:center;
-  border-bottom:1.5px solid var(--border);
+padding:12px 16px;
+font-size:13.5px;
+font-weight:700;
+text-align:center;
+border-bottom:1.5px solid var(--border);
 }
 .truck-rail-winner-truck{ background:#dbeafe; color:#1e40af; }
 .truck-rail-winner-rail{ background:#dcfce7; color:#166534; }
 .truck-rail-winner-tie{ background:#fef9c3; color:#92400e; }
 .truck-rail-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
+display:grid;
+grid-template-columns:1fr 1fr;
 }
 .truck-rail-col{
-  padding:16px;
+padding:16px;
 }
 .truck-rail-col:first-child{ border-right:1.5px solid var(--border); }
 .truck-rail-col-title{
-  font-size:11px;
-  font-weight:700;
-  color:var(--label);
-  text-transform:uppercase;
-  letter-spacing:.07em;
-  margin-bottom:10px;
-  padding-bottom:6px;
-  border-bottom:1.5px solid var(--border);
+font-size:11px;
+font-weight:700;
+color:var(--label);
+text-transform:uppercase;
+letter-spacing:.07em;
+margin-bottom:10px;
+padding-bottom:6px;
+border-bottom:1.5px solid var(--border);
 }
 .truck-rail-row{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:6px 0;
-  border-bottom:1px solid var(--border);
-  font-size:13px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:6px 0;
+border-bottom:1px solid var(--border);
+font-size:13px;
 }
 .truck-rail-row:last-child{ border-bottom:none; }
 .truck-rail-label{ color:var(--text-muted); }
 .truck-rail-value{ font-family:'DM Mono',monospace; font-weight:600; color:var(--text); }
 .truck-rail-total-row{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:9px 8px;
-  font-size:14px;
-  font-weight:700;
-  margin-top:8px;
-  border-top:2px solid var(--total-border);
-  background:var(--total-bg);
-  border-radius:6px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:9px 8px;
+font-size:14px;
+font-weight:700;
+margin-top:8px;
+border-top:2px solid var(--total-border);
+background:var(--total-bg);
+border-radius:6px;
 }
 .truck-rail-note{
-  font-size:11px;
-  color:var(--text-muted);
-  font-style:italic;
-  padding:8px 16px;
-  border-top:1px solid var(--border);
-  background:var(--row-alt);
-  text-align:center;
+font-size:11px;
+color:var(--text-muted);
+font-style:italic;
+padding:8px 16px;
+border-top:1px solid var(--border);
+background:var(--row-alt);
+text-align:center;
 }
 </style>
 </head>
-
 <body>
 <div class="header">
-  <div class="header-icon">🚚</div>
-  MattGPT Freight Estimate Tool
-  <span class="data-status" id="dataStatus">Loading rates…</span>
+<div class="header-icon">🚚</div>
+MattGPT Freight Estimate Tool
+<span class="data-status" id="dataStatus">Loading rates…</span>
 </div>
-
 <div class="container" id="appContainer">
-  <div class="card"><div class="card-body"><div class="loading-overlay">Loading rate data, please wait…</div></div></div>
+<div class="card"><div class="card-body"><div class="loading-overlay">Loading rate data, please wait…</div></div></div>
 </div>
-
 <script>
 const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg";
-
 let RATES = [];
 let ORIGIN_ZIPS = {};
 let currentMatch = null;
 let currentCompareMatches = null;
-
 let SELECTED_MODE = "TRUCK";
 let SELECTED_RAIL_EQ = "ALL";
 
 const RAIL_ORIGIN_LABELS = {
-  "ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
-  "GLADYS,VA,US": "BROOKNEAL / GLADYS / NARUNA, VA",
-  "CORRIGAN,TX,US": "CORRIGAN / MOSCOW, TX"
+"ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
+"GLADYS,VA,US": "BROOKNEAL / GLADYS / NARUNA, VA",
+"NARUNA,VA,US": "BROOKNEAL / GLADYS / NARUNA, VA",
+"CORRIGAN,TX,US": "CORRIGAN / MOSCOW, TX",
+"CAMDEN,TX,US": "CAMDEN, TX",
+"DIBOLL,TX,US": "DIBOLL, TX",
+"DUDLEY,NC,US": "DUDLEY / GOLDSBORO, NC",
+"FORDYCE,AR,US": "FORDYCE, AR",
+"GURDON,AR,US": "GURDON, AR",
+"HOSFORD,FL,US": "HOSFORD, FL",
+"MADISON,GA,US": "MADISON, GA",
+"PROSPERITY,SC,US": "PROSPERITY, SC",
+"THOMSON,GA,US": "THOMSON, GA",
+"CUMBERLAND CITY,TN,US": "CUMBERLAND CITY, TN",
+"MT JEWETT,PA,US": "MT JEWETT, PA",
+"SAVANNAH,GA,US": "SAVANNAH, GA",
+"TAYLORSVILLE,MS,US": "TAYLORSVILLE, MS",
+"TACOMA,WA,US": "TACOMA, WA",
+"ENGLEHART,ON,CA": "ENGLEHART, ON",
+"EARLTON,ON,CA": "EARLTON, ON"
 };
 
 const zipSuggestCache = new Map();
@@ -265,1101 +271,890 @@ const ZIP_LS_KEY = "fet_zip_suggest_cache_v1";
 let LAST_DEST_CITY = "";
 let LAST_DEST_STATE = "";
 let LAST_DEST_ZIPS = [];
-
 const milesCache = new Map();
 const MILES_LS_KEY = "fet_miles_cache_v1";
-
 function _zipCacheKey(city, state){ return (city||"").trim().toUpperCase()+"||"+(state||"").trim().toUpperCase(); }
 function loadZipCache(){
-  try{
-    const raw = localStorage.getItem(ZIP_LS_KEY);
-    if(!raw) return;
-    const obj = JSON.parse(raw);
-    for(const [k,v] of Object.entries(obj)){
-      if(Array.isArray(v)) zipSuggestCache.set(k, v.filter(Boolean));
-    }
-  }catch(_){}
+try{
+const raw = localStorage.getItem(ZIP_LS_KEY);
+if(!raw) return;
+const obj = JSON.parse(raw);
+for(const [k,v] of Object.entries(obj)){
+if(Array.isArray(v)) zipSuggestCache.set(k, v.filter(Boolean));
+}
+}catch(_){}
 }
 function saveZipCache(){
-  try{
-    const entries = Array.from(zipSuggestCache.entries());
-    const trimmed = entries.slice(Math.max(0, entries.length - 300));
-    localStorage.setItem(ZIP_LS_KEY, JSON.stringify(Object.fromEntries(trimmed)));
-  }catch(_){}
+try{
+const entries = Array.from(zipSuggestCache.entries());
+const trimmed = entries.slice(Math.max(0, entries.length - 300));
+localStorage.setItem(ZIP_LS_KEY, JSON.stringify(Object.fromEntries(trimmed)));
+}catch(_){}
 }
 loadZipCache();
-
 function _milesKey(o,d){ return (o||"").trim().toUpperCase()+"||"+(d||"").trim().toUpperCase(); }
 function loadMilesCache(){
-  try{
-    const raw = localStorage.getItem(MILES_LS_KEY);
-    if(!raw) return;
-    const obj = JSON.parse(raw);
-    for(const [k,v] of Object.entries(obj)){
-      if(typeof v === "number") milesCache.set(k,v);
-    }
-  }catch(_){}
+try{
+const raw = localStorage.getItem(MILES_LS_KEY);
+if(!raw) return;
+const obj = JSON.parse(raw);
+for(const [k,v] of Object.entries(obj)){
+if(typeof v === "number") milesCache.set(k,v);
+}
+}catch(_){}
 }
 function saveMilesCache(){
-  try{
-    const entries = Array.from(milesCache.entries());
-    const trimmed = entries.slice(Math.max(0, entries.length - 1500));
-    localStorage.setItem(MILES_LS_KEY, JSON.stringify(Object.fromEntries(trimmed)));
-  }catch(_){}
+try{
+const entries = Array.from(milesCache.entries());
+const trimmed = entries.slice(Math.max(0, entries.length - 1500));
+localStorage.setItem(MILES_LS_KEY, JSON.stringify(Object.fromEntries(trimmed)));
+}catch(_){}
 }
 loadMilesCache();
 
 let _gmapsPromise = null;
 function loadGoogleMapsJS(){
-  if(window.google?.maps?.places) return Promise.resolve();
-  if(_gmapsPromise) return _gmapsPromise;
-
-  _gmapsPromise = new Promise((resolve,reject)=>{
-    if(!GMAPS_KEY) return resolve();
-    window.__initGMaps = ()=>resolve();
-    const s = document.createElement("script");
-    s.async = true;
-    s.defer = true;
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&libraries=places&callback=__initGMaps`;
-    s.onerror = ()=>reject(new Error("Google Maps failed to load"));
-    document.head.appendChild(s);
-  });
-  return _gmapsPromise;
+if(window.google?.maps?.places) return Promise.resolve();
+if(_gmapsPromise) return _gmapsPromise;
+_gmapsPromise = new Promise((resolve,reject)=>{
+if(!GMAPS_KEY) return resolve();
+window.__initGMaps = ()=>resolve();
+const s = document.createElement("script");
+s.async = true;
+s.defer = true;
+s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&libraries=places&callback=__initGMaps`;
+s.onerror = ()=>reject(new Error("Google Maps failed to load"));
+document.head.appendChild(s);
+});
+return _gmapsPromise;
 }
 
+// New row format from rates.json (16 cols starting with "TRUCK"/"RAIL"):
+// [mode, uom, rate, flat, currency, minCharge, bandMin, bandMax, equip,
+//  origLoc, origStateField, origCountry, destLoc, destStateField, destPostal, destCountry]
 function normRow(r){
-  if(!Array.isArray(r)) return null;
-  const first = (r[0]||"").toString().toUpperCase();
-  const isNew = (first === "TRUCK" || first === "RAIL");
-
-  if(isNew){
-    return {
-      mode: first,
-      uom: r[1], rate: r[2], flat: r[3], currency: r[4], minCharge: r[5],
-      equip: r[8],
-      origLoc: r[9],
-      origStateField: r[10],
-      origCountry: r[11],
-      destLoc: r[12],
-      destStateField: r[13],
-      destPostal: r[14],
-      destCountry: r[15],
-    };
-  }
-
-  return {
-    mode: "TRUCK",
-    uom: r[0], rate: r[1], flat: r[2], currency: r[3], minCharge: r[4],
-    equip: r[7],
-    origLoc: r[8],
-    origStateField: r[9],
-    origCountry: r[10],
-    destLoc: r[11],
-    destStateField: r[12],
-    destPostal: r[13],
-    destCountry: r[14],
-  };
+if(!Array.isArray(r)) return null;
+const first = (r[0]||"").toString().toUpperCase();
+const isNew = (first === "TRUCK" || first === "RAIL");
+if(isNew){
+return {
+mode: first,
+uom: r[1], rate: r[2], flat: r[3], currency: r[4], minCharge: r[5],
+bandMin: r[6], bandMax: r[7],
+equip: r[8],
+origLoc: r[9],
+origStateField: r[10],
+origCountry: r[11],
+destLoc: r[12],
+destStateField: r[13],
+destPostal: r[14],
+destCountry: r[15],
+};
+}
+return {
+mode: "TRUCK",
+uom: r[0], rate: r[1], flat: r[2], currency: r[3], minCharge: r[4],
+bandMin: r[5], bandMax: r[6],
+equip: r[7],
+origLoc: r[8],
+origStateField: r[9],
+origCountry: r[10],
+destLoc: r[11],
+destStateField: r[12],
+destPostal: r[13],
+destCountry: r[14],
+};
 }
 
 async function loadRates(){
-  try{
-    const res = await fetch("rates.json?_="+Date.now());
-    if(!res.ok) throw new Error("HTTP "+res.status);
-    const data = await res.json();
-
-    RATES = (data.rates || []).map(normRow).filter(Boolean);
-    ORIGIN_ZIPS = data.origin_zips || {};
-
-    buildUI();
-    document.getElementById("dataStatus").textContent = RATES.length.toLocaleString()+" rates loaded";
-    loadGoogleMapsJS().then(()=>initDestinationAutocomplete()).catch(()=>{});
-  }catch(e){
-    document.getElementById("appContainer").innerHTML =
-      '<div class="card"><div class="card-body"><div class="load-error">' +
-      '⚠️ Could not load rates.json — make sure the file is in the same folder as index.html.<br><small>' +
-      e.message + '</small></div></div></div>';
-    document.getElementById("dataStatus").textContent = "Load failed";
-  }
+try{
+const res = await fetch("rates.json?_="+Date.now());
+if(!res.ok) throw new Error("HTTP "+res.status);
+const data = await res.json();
+RATES = (data.rates || []).map(normRow).filter(Boolean);
+ORIGIN_ZIPS = data.origin_zips || {};
+buildUI();
+const truckCount = RATES.filter(r=>r.mode==="TRUCK").length;
+const railCount = RATES.filter(r=>r.mode==="RAIL").length;
+document.getElementById("dataStatus").textContent =
+RATES.length.toLocaleString()+" rates loaded (" +
+truckCount.toLocaleString() + " truck, " +
+railCount.toLocaleString() + " rail)";
+loadGoogleMapsJS().then(()=>initDestinationAutocomplete()).catch(()=>{});
+}catch(e){
+document.getElementById("appContainer").innerHTML =
+'<div class="card"><div class="card-body"><div class="load-error">' +
+'⚠️ Could not load rates.json — make sure the file is in the same folder as index.html.<br><small>' +
+e.message + '</small></div></div></div>';
+document.getElementById("dataStatus").textContent = "Load failed";
+}
 }
 
 function buildUI(){
-  document.getElementById("appContainer").innerHTML = `
-  <div class="card">
-    <div class="card-body">
-      <div class="form-grid">
-        <div class="field">
-          <label>Owner / Organization</label>
-          <input type="text" id="owner" value="WOOD_PRODUCTS">
-        </div>
-
-        <div class="field" style="align-items:flex-start;">
-          <label>Equipment Mode</label>
-          <div class="seg">
-            <button id="modeTruck" class="${SELECTED_MODE==="TRUCK"?"active":""}" onclick="setMode('TRUCK')">🚚 Truck</button>
-            <button id="modeRail" class="${SELECTED_MODE==="RAIL"?"active":""}" onclick="setMode('RAIL')">🚂 Rail</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <label>Week Of</label>
-          <input type="date" id="weekOf" value="${new Date().toISOString().slice(0,10)}">
-        </div>
-      </div>
-
-      <div class="error-banner" id="errorBanner">
-        Origin facility and Destination (City &amp; State, or Zip) are required.
-      </div>
-
-      <div class="section-label">Origin</div>
-      <div class="form-row-5">
-        <div class="field">
-          <label>Origin Facility</label>
-          <select id="originFacility" onchange="onOriginChange()">
-            <option value="">-- Select Origin --</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Origin City</label>
-          <input type="text" id="originCity" readonly>
-        </div>
-        <div class="field">
-          <label>Origin State</label>
-          <input type="text" id="originState" readonly>
-        </div>
-        <div class="field">
-          <label>Origin Zip Code</label>
-          <input type="text" id="originZip" readonly>
-        </div>
-      </div>
-
-      <div class="section-label">Destination</div>
-      <div class="form-row-3">
-        <div class="field">
-          <label>Destination City</label>
-          <input type="text" id="destCity" placeholder="e.g. ATLANTA">
-        </div>
-        <div class="field">
-          <label>Destination State</label>
-          <input type="text" id="destState" placeholder="e.g. GA">
-        </div>
-        <div class="field">
-          <label>Destination Zip</label>
-          <input type="text" id="destZip" placeholder="e.g. 30303">
-          <div class="zip-hint" id="zipHint" style="display:none;">Select a ZIP suggestion (or type one).</div>
-        </div>
-      </div>
-
-      <div class="field" id="railEquipWrap" style="display:${SELECTED_MODE==="RAIL" ? "block":"none"}; margin-bottom:16px;">
-        <label>Rail Equipment</label>
-        <select id="railEquip" onchange="onRailEquipChange()">
-          <option value="ALL">All</option>
-          <option value="BOXCAR">Boxcar</option>
-          <option value="CENTERBEAM">Centerbeam</option>
-          <option value="COMPARE">Compare Both</option>
-        </select>
-      </div>
-
-      <div class="btn-row">
-        <button class="btn btn-primary" onclick="submitQuote()">Submit</button>
-        <button class="btn btn-secondary" onclick="clearForm()">Clear</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="card" id="resultsCard">
-    <div class="results-header">
-      <div class="results-header-left">Rate Type <span id="rateTypeBadge"></span></div>
-      <div id="matchBadge"></div>
-    </div>
-    <div class="adj-panel">
-      <label>% Adjustment to GP Rate</label>
-      <div class="adj-input-wrap">
-        <input class="adj-input" type="number" id="pctAdj" value="0" step="0.1" min="-100" max="999" onchange="recalc()" oninput="recalc()">
-        <span>%</span>
-      </div>
-      <span class="adj-hint">Positive = markup &nbsp;|&nbsp; Negative = discount</span>
-    </div>
-    <div id="resultsContent">
-      <div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>
-    </div>
-  </div>`;
-
-  refreshOriginOptions();
-
-  const zipInput = document.getElementById("destZip");
-  zipInput?.addEventListener("focus", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
-  zipInput?.addEventListener("click", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
-
-  document.addEventListener("click",(e)=>{
-    const picker = document.getElementById("zipPicker");
-    if(!picker) return;
-    if(e.target.closest("#zipPicker")) return;
-    if(e.target.closest("#destZip")) return;
-    hideZipPicker();
-  },{capture:true});
-
-  window.addEventListener("scroll",()=>hideZipPicker(),{passive:true});
-  window.addEventListener("resize",()=>hideZipPicker(),{passive:true});
-
-  initDestinationAutocomplete();
+document.getElementById("appContainer").innerHTML = `
+<div class="card">
+<div class="card-body">
+<div class="form-grid">
+<div class="field">
+<label>Owner / Organization</label>
+<input type="text" id="owner" value="WOOD_PRODUCTS">
+</div>
+<div class="field" style="align-items:flex-start;">
+<label>Equipment Mode</label>
+<div class="seg">
+<button id="modeTruck" class="${SELECTED_MODE==="TRUCK"?"active":""}" onclick="setMode('TRUCK')">🚚 Truck</button>
+<button id="modeRail" class="${SELECTED_MODE==="RAIL"?"active":""}" onclick="setMode('RAIL')">🚂 Rail</button>
+</div>
+</div>
+<div class="field">
+<label>Week Of</label>
+<input type="date" id="weekOf" value="${new Date().toISOString().slice(0,10)}">
+</div>
+</div>
+<div class="error-banner" id="errorBanner">
+Origin facility and Destination (City &amp; State, or Zip) are required.
+</div>
+<div class="section-label">Origin</div>
+<div class="form-row-5">
+<div class="field">
+<label>Origin Facility</label>
+<select id="originFacility" onchange="onOriginChange()">
+<option value="">-- Select Origin --</option>
+</select>
+</div>
+<div class="field">
+<label>Origin City</label>
+<input type="text" id="originCity" readonly>
+</div>
+<div class="field">
+<label>Origin State</label>
+<input type="text" id="originState" readonly>
+</div>
+<div class="field">
+<label>Origin Zip Code</label>
+<input type="text" id="originZip" readonly>
+</div>
+</div>
+<div class="section-label">Destination</div>
+<div class="form-row-3">
+<div class="field">
+<label>Destination City</label>
+<input type="text" id="destCity" placeholder="e.g. ATLANTA">
+</div>
+<div class="field">
+<label>Destination State</label>
+<input type="text" id="destState" placeholder="e.g. GA">
+</div>
+<div class="field">
+<label>Destination Zip</label>
+<input type="text" id="destZip" placeholder="e.g. 30303">
+<div class="zip-hint" id="zipHint" style="display:none;">Select a ZIP suggestion (or type one).</div>
+</div>
+</div>
+<div class="field" id="railEquipWrap" style="display:${SELECTED_MODE==="RAIL" ? "block":"none"}; margin-bottom:16px;">
+<label>Rail Equipment</label>
+<select id="railEquip" onchange="onRailEquipChange()">
+<option value="ALL">All</option>
+<option value="BOXCAR">Boxcar</option>
+<option value="CENTERBEAM">Centerbeam</option>
+<option value="COMPARE">Compare Both</option>
+</select>
+</div>
+<div class="btn-row">
+<button class="btn btn-primary" onclick="submitQuote()">Submit</button>
+<button class="btn btn-secondary" onclick="clearForm()">Clear</button>
+</div>
+</div>
+</div>
+<div class="card" id="resultsCard">
+<div class="results-header">
+<div class="results-header-left">Rate Type <span id="rateTypeBadge"></span></div>
+<div id="matchBadge"></div>
+</div>
+<div class="adj-panel">
+<label>% Adjustment to GP Rate</label>
+<div class="adj-input-wrap">
+<input class="adj-input" type="number" id="pctAdj" value="0" step="0.1" min="-100" max="999" onchange="recalc()" oninput="recalc()">
+<span>%</span>
+</div>
+<span class="adj-hint">Positive = markup &nbsp;|&nbsp; Negative = discount</span>
+</div>
+<div id="resultsContent">
+<div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>
+</div>
+</div>`;
+refreshOriginOptions();
+const zipInput = document.getElementById("destZip");
+zipInput?.addEventListener("focus", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
+zipInput?.addEventListener("click", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
+document.addEventListener("click",(e)=>{
+const picker = document.getElementById("zipPicker");
+if(!picker) return;
+if(e.target.closest("#zipPicker")) return;
+if(e.target.closest("#destZip")) return;
+hideZipPicker();
+},{capture:true});
+window.addEventListener("scroll",()=>hideZipPicker(),{passive:true});
+window.addEventListener("resize",()=>hideZipPicker(),{passive:true});
+initDestinationAutocomplete();
 }
 
 function setMode(mode){
-  SELECTED_MODE = mode;
-  if(mode !== "RAIL") SELECTED_RAIL_EQ = "ALL";
-
-  document.getElementById("modeTruck")?.classList.toggle("active", mode==="TRUCK");
-  document.getElementById("modeRail")?.classList.toggle("active", mode==="RAIL");
-
-  const wrap = document.getElementById("railEquipWrap");
-  if(wrap) wrap.style.display = (mode==="RAIL") ? "block" : "none";
-
-  refreshOriginOptions();
-  clearResultsOnly();
+SELECTED_MODE = mode;
+if(mode !== "RAIL") SELECTED_RAIL_EQ = "ALL";
+document.getElementById("modeTruck")?.classList.toggle("active", mode==="TRUCK");
+document.getElementById("modeRail")?.classList.toggle("active", mode==="RAIL");
+const wrap = document.getElementById("railEquipWrap");
+if(wrap) wrap.style.display = (mode==="RAIL") ? "block" : "none";
+refreshOriginOptions();
+clearResultsOnly();
 }
 
 function onRailEquipChange(){
-  SELECTED_RAIL_EQ = document.getElementById("railEquip")?.value || "ALL";
-  clearResultsOnly();
+SELECTED_RAIL_EQ = document.getElementById("railEquip")?.value || "ALL";
+clearResultsOnly();
 }
 
 function clearResultsOnly(){
-  document.getElementById("matchBadge")?.replaceChildren();
-  const rb = document.getElementById("rateTypeBadge"); if(rb) rb.textContent="";
-  const rc = document.getElementById("resultsContent");
-  if(rc) rc.innerHTML = '<div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>';
-  currentMatch = null;
-  currentCompareMatches = null;
-  window._matchData = null;
-  window._lastRailTotal = null;
-  const existing = document.getElementById("truckRailCompareBox");
-  if(existing) existing.remove();
+document.getElementById("matchBadge")?.replaceChildren();
+const rb = document.getElementById("rateTypeBadge"); if(rb) rb.textContent="";
+const rc = document.getElementById("resultsContent");
+if(rc) rc.innerHTML = '<div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>';
+currentMatch = null;
+currentCompareMatches = null;
+window._matchData = null;
+window._lastRailTotal = null;
+const existing = document.getElementById("truckRailCompareBox");
+if(existing) existing.remove();
 }
 
 function refreshOriginOptions(){
-  const originSelect = document.getElementById("originFacility");
-  if(!originSelect) return;
-
-  const origins = getOriginsForMode(SELECTED_MODE);
-  originSelect.innerHTML = `<option value="">-- Select Origin --</option>` +
-    origins.map(o=>{
-      const label = (SELECTED_MODE === "RAIL" && RAIL_ORIGIN_LABELS[o]) ? RAIL_ORIGIN_LABELS[o] : o;
-      return `<option value="${o}">${label}</option>`;
-    }).join("");
-
-  document.getElementById("originCity").value="";
-  document.getElementById("originState").value="";
-  document.getElementById("originZip").value="";
+const originSelect = document.getElementById("originFacility");
+if(!originSelect) return;
+const origins = getOriginsForMode(SELECTED_MODE);
+originSelect.innerHTML = `<option value="">-- Select Origin --</option>` +
+origins.map(o=>{
+const label = (SELECTED_MODE === "RAIL" && RAIL_ORIGIN_LABELS[o]) ? RAIL_ORIGIN_LABELS[o] : o;
+return `<option value="${o}">${label}</option>`;
+}).join("");
+document.getElementById("originCity").value="";
+document.getElementById("originState").value="";
+document.getElementById("originZip").value="";
 }
 
 function getOriginsForMode(mode){
-  const set = new Set();
-  for(const r of RATES){
-    if(r.mode !== mode) continue;
-    if(r.origLoc) set.add(r.origLoc);
-  }
-  return Array.from(set).sort();
+const set = new Set();
+for(const r of RATES){
+if(r.mode !== mode) continue;
+if(r.origLoc) set.add(r.origLoc);
+}
+return Array.from(set).sort();
 }
 
 function onOriginChange(){
-  const val = document.getElementById("originFacility").value;
-  if(!val){
-    document.getElementById("originCity").value="";
-    document.getElementById("originState").value="";
-    document.getElementById("originZip").value="";
-    return;
-  }
-  const parts = val.split(",");
-  document.getElementById("originCity").value = (parts[0]||"").trim();
-  document.getElementById("originState").value = (parts[1]||"").trim();
-  document.getElementById("originZip").value = ORIGIN_ZIPS[val] || "";
+const val = document.getElementById("originFacility").value;
+if(!val){
+document.getElementById("originCity").value="";
+document.getElementById("originState").value="";
+document.getElementById("originZip").value="";
+return;
+}
+const parts = val.split(",");
+document.getElementById("originCity").value = (parts[0]||"").trim();
+document.getElementById("originState").value = (parts[1]||"").trim();
+document.getElementById("originZip").value = ORIGIN_ZIPS[val] || "";
 }
 
 let _destAutocomplete = null;
 function initDestinationAutocomplete(){
-  if(!window.google?.maps?.places) return;
-  const cityEl = document.getElementById("destCity");
-  const stateEl = document.getElementById("destState");
-  if(!cityEl || !stateEl) return;
-  if(_destAutocomplete) return;
-
-  _destAutocomplete = new google.maps.places.Autocomplete(cityEl,{
-    types:["(cities)"],
-    componentRestrictions:{country:["us"]},
-    fields:["address_components","geometry","name"]
-  });
-
-  _destAutocomplete.addListener("place_changed", async ()=>{
-    const place = _destAutocomplete.getPlace();
-    if(!place?.address_components) return;
-
-    const getComp=(type,short=false)=>
-      place.address_components.find(c=>c.types.includes(type))?.[short?"short_name":"long_name"] || "";
-
-    const city = (getComp("locality") || place.name || "").toUpperCase();
-    const state = (getComp("administrative_area_level_1", true) || "").toUpperCase();
-
-    cityEl.value = city;
-    if(state) stateEl.value = state;
-
-    const zips = await suggestZipsForCity(place, city, state);
-    LAST_DEST_CITY = city;
-    LAST_DEST_STATE = state;
-    LAST_DEST_ZIPS = zips;
-
-    showZipPicker(zips, city, state);
-  });
+if(!window.google?.maps?.places) return;
+const cityEl = document.getElementById("destCity");
+const stateEl = document.getElementById("destState");
+if(!cityEl || !stateEl) return;
+if(_destAutocomplete) return;
+_destAutocomplete = new google.maps.places.Autocomplete(cityEl,{
+types:["(cities)"],
+componentRestrictions:{country:["us"]},
+fields:["address_components","geometry","name"]
+});
+_destAutocomplete.addListener("place_changed", async ()=>{
+const place = _destAutocomplete.getPlace();
+if(!place?.address_components) return;
+const getComp=(type,short=false)=>
+place.address_components.find(c=>c.types.includes(type))?.[short?"short_name":"long_name"] || "";
+const city = (getComp("locality") || place.name || "").toUpperCase();
+const state = (getComp("administrative_area_level_1", true) || "").toUpperCase();
+cityEl.value = city;
+if(state) stateEl.value = state;
+const zips = await suggestZipsForCity(place, city, state);
+LAST_DEST_CITY = city;
+LAST_DEST_STATE = state;
+LAST_DEST_ZIPS = zips;
+showZipPicker(zips, city, state);
+});
 }
 
 async function suggestZipsForCity(place, city, state){
-  if(!place?.geometry?.location) return [];
-  const key = _zipCacheKey(city, state);
-  if(city && state && zipSuggestCache.has(key)) return zipSuggestCache.get(key);
-  if(!window.google?.maps?.Geocoder) return [];
-
-  const lat = place.geometry.location.lat();
-  const lng = place.geometry.location.lng();
-  const points = [
-    {lat,lng},{lat:lat+0.06,lng},{lat:lat-0.06,lng},{lat,lng:lng+0.06},{lat,lng:lng-0.06},
-    {lat:lat+0.04,lng:lng+0.04},{lat:lat-0.04,lng:lng-0.04}
-  ];
-
-  const geocoder = new google.maps.Geocoder();
-  const found = new Set();
-
-  for(const p of points){
-    const results = await new Promise(resolve=>{
-      geocoder.geocode({location:p},(res,status)=>resolve(status==="OK"? (res||[]) : []));
-    });
-    for(const r of results){
-      const pc = r.address_components?.find(c=>c.types.includes("postal_code"))?.long_name;
-      if(pc) found.add(pc);
-    }
-  }
-
-  const zips = Array.from(found).slice(0,20);
-  if(city && state && zips.length){
-    zipSuggestCache.set(key, zips);
-    saveZipCache();
-  }
-  return zips;
+if(!place?.geometry?.location) return [];
+const key = _zipCacheKey(city, state);
+if(city && state && zipSuggestCache.has(key)) return zipSuggestCache.get(key);
+if(!window.google?.maps?.Geocoder) return [];
+const lat = place.geometry.location.lat();
+const lng = place.geometry.location.lng();
+const points = [
+{lat,lng},{lat:lat+0.06,lng},{lat:lat-0.06,lng},{lat,lng:lng+0.06},{lat,lng:lng-0.06},
+{lat:lat+0.04,lng:lng+0.04},{lat:lat-0.04,lng:lng-0.04}
+];
+const geocoder = new google.maps.Geocoder();
+const found = new Set();
+for(const p of points){
+const results = await new Promise(resolve=>{
+geocoder.geocode({location:p},(res,status)=>resolve(status==="OK"? (res||[]) : []));
+});
+for(const r of results){
+const pc = r.address_components?.find(c=>c.types.includes("postal_code"))?.long_name;
+if(pc) found.add(pc);
+}
+}
+const zips = Array.from(found).slice(0,20);
+if(city && state && zips.length){
+zipSuggestCache.set(key, zips);
+saveZipCache();
+}
+return zips;
 }
 
 function hideZipPicker(){
-  document.getElementById("zipPicker")?.remove();
-  const hint = document.getElementById("zipHint");
-  if(hint) hint.style.display="none";
+document.getElementById("zipPicker")?.remove();
+const hint = document.getElementById("zipHint");
+if(hint) hint.style.display="none";
 }
+
 function showZipPicker(zips, city, state){
-  hideZipPicker();
-  if(!zips || !zips.length) return;
-  const zipInput = document.getElementById("destZip");
-  if(!zipInput) return;
-
-  const hint = document.getElementById("zipHint");
-  if(hint) hint.style.display="block";
-
-  const picker = document.createElement("div");
-  picker.id="zipPicker";
-  picker.className="zip-picker";
-  picker.innerHTML = zips.map(zip=>`
-    <div class="zip-item" data-zip="${zip}">
-      <strong>${city}, ${state}, ${zip}, USA</strong>
-    </div>
-  `).join("");
-
-  picker.addEventListener("click",(e)=>{
-    const row = e.target.closest(".zip-item");
-    if(!row) return;
-    zipInput.value = row.getAttribute("data-zip") || "";
-    hideZipPicker();
-    zipInput.focus();
-  });
-
-  document.body.appendChild(picker);
-
-  const r = zipInput.getBoundingClientRect();
-  const pad = 10;
-  const spaceBelow = window.innerHeight - r.bottom - pad;
-  const spaceAbove = r.top - pad;
-  const openDown = spaceBelow >= 260 || spaceBelow >= spaceAbove;
-
-  const maxH = Math.max(160, Math.min(560, openDown ? spaceBelow : spaceAbove));
-  picker.style.maxHeight = `${maxH}px`;
-  picker.style.width = `${r.width}px`;
-
-  let left = r.left;
-  left = Math.max(pad, Math.min(left, window.innerWidth - r.width - pad));
-  picker.style.left = `${left}px`;
-
-  picker.style.top = openDown
-    ? `${Math.min(r.bottom + 6, window.innerHeight - maxH - pad)}px`
-    : `${Math.max(pad, r.top - maxH - 6)}px`;
+hideZipPicker();
+if(!zips || !zips.length) return;
+const zipInput = document.getElementById("destZip");
+if(!zipInput) return;
+const hint = document.getElementById("zipHint");
+if(hint) hint.style.display="block";
+const picker = document.createElement("div");
+picker.id="zipPicker";
+picker.className="zip-picker";
+picker.innerHTML = zips.map(zip=>`
+<div class="zip-item" data-zip="${zip}">
+<strong>${city}, ${state}, ${zip}, USA</strong>
+</div>
+`).join("");
+picker.addEventListener("click",(e)=>{
+const row = e.target.closest(".zip-item");
+if(!row) return;
+zipInput.value = row.getAttribute("data-zip") || "";
+hideZipPicker();
+zipInput.focus();
+});
+document.body.appendChild(picker);
+const r = zipInput.getBoundingClientRect();
+const pad = 10;
+const spaceBelow = window.innerHeight - r.bottom - pad;
+const spaceAbove = r.top - pad;
+const openDown = spaceBelow >= 260 || spaceBelow >= spaceAbove;
+const maxH = Math.max(160, Math.min(560, openDown ? spaceBelow : spaceAbove));
+picker.style.maxHeight = `${maxH}px`;
+picker.style.width = `${r.width}px`;
+let left = r.left;
+left = Math.max(pad, Math.min(left, window.innerWidth - r.width - pad));
+picker.style.left = `${left}px`;
+picker.style.top = openDown
+? `${Math.min(r.bottom + 6, window.innerHeight - maxH - pad)}px`
+: `${Math.max(pad, r.top - maxH - 6)}px`;
 }
 
 function buildOriginString(originZip, originFac){
-  if(originZip) return originZip;
-  const parts = originFac.split(",");
-  return `${(parts[0]||"").trim()} ${(parts[1]||"").trim()}`.trim();
+if(originZip) return originZip;
+const parts = originFac.split(",");
+return `${(parts[0]||"").trim()} ${(parts[1]||"").trim()}`.trim();
 }
+
 function buildDestString(destZip, destCity, destState){
-  return destZip || `${destCity} ${destState}`.trim();
+return destZip || `${destCity} ${destState}`.trim();
 }
 
 async function submitQuote(){
-  const originFac = document.getElementById("originFacility").value.trim().toUpperCase();
-  const destCity  = document.getElementById("destCity").value.trim().toUpperCase();
-  const destState = document.getElementById("destState").value.trim().toUpperCase();
-  const destZip   = document.getElementById("destZip").value.trim().toUpperCase();
-  const banner    = document.getElementById("errorBanner");
+const originFac = document.getElementById("originFacility").value.trim().toUpperCase();
+const destCity = document.getElementById("destCity").value.trim().toUpperCase();
+const destState = document.getElementById("destState").value.trim().toUpperCase();
+const destZip = document.getElementById("destZip").value.trim().toUpperCase();
+const banner = document.getElementById("errorBanner");
+const hasOrigin = !!originFac;
+const hasDest = (destCity && destState) || destZip;
+if(!hasOrigin || !hasDest){ banner.classList.add("show"); return; }
+banner.classList.remove("show");
+hideZipPicker();
 
-  const hasOrigin = !!originFac;
-  const hasDest = (destCity && destState) || destZip;
+const btn = document.querySelector(".btn-primary");
+const origText = btn.textContent;
+btn.textContent = "Calculating…";
+btn.disabled = true;
 
-  if(!hasOrigin || !hasDest){ banner.classList.add("show"); return; }
-  banner.classList.remove("show");
-  hideZipPicker();
+const originZip = document.getElementById("originZip").value.trim();
+const miles = await getMileageCached(originZip, originFac, destZip, destCity, destState);
 
-  const btn = document.querySelector(".btn-primary");
-  const origText = btn.textContent;
-  btn.textContent = "Calculating…";
-  btn.disabled = true;
+btn.textContent = origText;
+btn.disabled = false;
 
-  const originZip = document.getElementById("originZip").value.trim();
-  const miles = await getMileageCached(originZip, originFac, destZip, destCity, destState);
+if(SELECTED_MODE === "RAIL" && SELECTED_RAIL_EQ === "COMPARE"){
+const boxcar = findRateByGroup(originFac, destCity, destState, destZip, "BOXCAR");
+const centerbeam = findRateByGroup(originFac, destCity, destState, destZip, "CENTERBEAM");
+displayCompareResults(boxcar, centerbeam, miles);
+return;
+}
 
-  btn.textContent = origText;
-  btn.disabled = false;
+window._lastQuery = { originFac, destCity, destState, destZip };
 
-  if(SELECTED_MODE === "RAIL" && SELECTED_RAIL_EQ === "COMPARE"){
-    const boxcar = findRateByGroup(originFac, destCity, destState, destZip, "BOXCAR");
-    const centerbeam = findRateByGroup(originFac, destCity, destState, destZip, "CENTERBEAM");
-    displayCompareResults(boxcar, centerbeam, miles);
-    return;
-  }
-
-  window._lastQuery = { originFac, destCity, destState, destZip };
-  const match = findRate(originFac, destCity, destState, destZip);
-  displayResults(match, miles);
+const match = findRate(originFac, destCity, destState, destZip, miles);
+displayResults(match, miles);
 }
 
 async function getMileageCached(originZip, originFac, destZip, destCity, destState){
-  const originStr = buildOriginString(originZip, originFac);
-  const destStr = buildDestString(destZip, destCity, destState);
-  const key = _milesKey(originStr, destStr);
-
-  if(milesCache.has(key)) return milesCache.get(key);
-
-  const miles = await getMileageGoogle(originStr, destStr);
-  if(typeof miles === "number"){
-    milesCache.set(key, miles);
-    saveMilesCache();
-  }
-  return miles;
+const originStr = buildOriginString(originZip, originFac);
+const destStr = buildDestString(destZip, destCity, destState);
+const key = _milesKey(originStr, destStr);
+if(milesCache.has(key)) return milesCache.get(key);
+const miles = await getMileageGoogle(originStr, destStr);
+if(typeof miles === "number"){
+milesCache.set(key, miles);
+saveMilesCache();
+}
+return miles;
 }
 
 async function getMileageGoogle(originStr, destStr){
-  if(!GMAPS_KEY) return null;
-  try{
-    await loadGoogleMapsJS();
-    if(!window.google?.maps?.DistanceMatrixService) return null;
-
-    const service = new google.maps.DistanceMatrixService();
-    const response = await new Promise((resolve,reject)=>{
-      service.getDistanceMatrix({
-        origins:[originStr], destinations:[destStr],
-        travelMode:google.maps.TravelMode.DRIVING,
-        unitSystem:google.maps.UnitSystem.IMPERIAL
-      }, (res,status)=> status==="OK" ? resolve(res) : reject(new Error(status)));
-    });
-
-    const el = response?.rows?.[0]?.elements?.[0];
-    if(!el || el.status!=="OK") return null;
-    return Math.round(el.distance.value/1609.34);
-  }catch(_){
-    return null;
-  }
+if(!GMAPS_KEY) return null;
+try{
+await loadGoogleMapsJS();
+if(!window.google?.maps?.DistanceMatrixService) return null;
+const service = new google.maps.DistanceMatrixService();
+const response = await new Promise((resolve,reject)=>{
+service.getDistanceMatrix({
+origins:[originStr], destinations:[destStr],
+travelMode:google.maps.TravelMode.DRIVING,
+unitSystem:google.maps.UnitSystem.IMPERIAL
+}, (res,status)=> status==="OK" ? resolve(res) : reject(new Error(status)));
+});
+const el = response?.rows?.[0]?.elements?.[0];
+if(!el || el.status!=="OK") return null;
+return Math.round(el.distance.value/1609.34);
+}catch(_){
+return null;
+}
 }
 
 function nc(str){ return str ? str.split(",")[0].trim().toUpperCase() : ""; }
 
+// Equipment grouping handles both long-form codes (60BX000HV, 73RF000) and
+// short-form codes (B60, B63, H63, C73, H73, F60, etc.) from KBX rail data.
+// Classification is based on actual EqpDesc descriptions in GP_Rail_Freight.xlsx:
+//   B-prefix (B50/B52/B60/B63), H63, HF52 → BOXCAR (all describe boxcars)
+//   C73/C74/H73/H74 → CENTERBEAM (not-bulkhead flat cars)
+//   F60/F62 → CENTERBEAM (bulkhead flatcars)
 function railEquipGroup(code){
-  const c = (code || "").trim().toUpperCase();
-  if (!c) return "UNKNOWN";
-if (c.includes("BX") || c.includes("CH")) return "BOXCAR";
-  if (c.includes("RF")) return "CENTERBEAM";
-    return "OTHER";
+const c = (code || "").trim().toUpperCase();
+if (!c) return "UNKNOWN";
+// Long-form codes
+if (c.includes("BX")) return "BOXCAR";
+if (c.includes("CH")) return "BOXCAR";
+if (c.includes("RF")) return "CENTERBEAM";
+if (c.includes("BF")) return "CENTERBEAM";
+// Short-form code lookup (KBX rail rates)
+const SHORT_FORM = {
+"B50":"BOXCAR","B52":"BOXCAR","B60":"BOXCAR","B63":"BOXCAR",
+"H63":"BOXCAR","HF52":"BOXCAR",
+"C73":"CENTERBEAM","C74":"CENTERBEAM","H73":"CENTERBEAM","H74":"CENTERBEAM",
+"F60":"CENTERBEAM","F62":"CENTERBEAM"
+};
+if (SHORT_FORM[c]) return SHORT_FORM[c];
+// Fallback heuristics for unknown short-form codes
+if (/^B\d/.test(c)) return "BOXCAR";
+if (/^F\d/.test(c)) return "CENTERBEAM";
+return "OTHER";
 }
 
+// Lower priority value wins. Prefer the most "standard" rate per group.
 function getBoxcarPriority(code){
-  const c = (code || "").trim().toUpperCase();
-  if (c === "60BX000HV") return 1;
-    if (c.endsWith("63")) return 2;
-      if (c.endsWith("60")) return 3;
-        if (c.endsWith("50")) return 4;
-          if (c.endsWith("52")) return 5;
-            return 99;
-            }
+const c = (code || "").trim().toUpperCase();
+// Long-form
+if (c === "60BX000HV") return 1;
+if (c === "60BX000HV POOL") return 2;
+if (c === "60BX000") return 3;
+if (c === "52BX000HV") return 4;
+if (c === "52BX000") return 5;
+if (c === "50BX000") return 6;
+if (c === "50CH0PD") return 7;
+if (c === "50CH0PDNSYS") return 8;
+// Short-form
+if (c === "B60") return 10;     // 60 Ft BOXCAR
+if (c === "B63") return 11;     // 60 Ft BOXCAR HIGH CAPACITY
+if (c === "H63") return 12;     // AAR Pool 7540009 Box
+if (c === "HF52") return 13;    // 52 Ft BOXCAR CAPACITY >5600 CU FT
+if (c === "B52") return 14;     // 52 Ft BOXCAR
+if (c === "B50") return 15;     // 50 Ft BOXCAR
+// Legacy patterns
+if (c.endsWith("63")) return 20;
+if (c.endsWith("60")) return 21;
+if (c.endsWith("50")) return 22;
+if (c.endsWith("52")) return 23;
+return 99;
+}
 
 function getCenterbeamPriority(code){
-  const c = (code || "").trim().toUpperCase();
-    if (c === "73RF000") return 1;
-      if (c.endsWith("73")) {
-            if (c.startsWith("C")) return 2;
-                if (c.startsWith("H")) return 3;
-                    return 4;
-                      }
-                        return 99;
-                        
-      }
-function findRate(originFac, destCity, destState, destZip){
-  let best=null, bestScore=-1, bestPriority=999;
+const c = (code || "").trim().toUpperCase();
+// Long-form
+if (c === "73RF000") return 1;
+if (c === "73RF000HH") return 2;
+if (c === "73RF000NSYS") return 3;
+if (c === "73RF000HHNSYS") return 4;
+if (c === "60BF000") return 5;
+if (c === "62BF000") return 6;
+// Short-form (C73/C74/H73/H74 = not-bulkhead flat car; F60/F62 = bulkhead flat)
+if (c === "C73") return 10;
+if (c === "H73") return 11;
+if (c === "C74") return 12;
+if (c === "H74") return 13;
+if (c === "F60") return 14;
+if (c === "F62") return 15;
+// Legacy patterns
+if (c.endsWith("73")) {
+if (c.startsWith("C")) return 20;
+if (c.startsWith("H")) return 21;
+return 22;
+}
+return 99;
+}
 
-  for(const r of RATES){
-    if(r.mode !== SELECTED_MODE) continue;
+// Band lookup: for rates with banded distances (BAND UOM MIN/MAX), select the row
+// whose miles range covers the trip distance. Falls back to unbanded row.
+function rateMatchesBand(r, miles){
+const bMin = Number(r.bandMin);
+const bMax = Number(r.bandMax);
+const hasBand = !isNaN(bMin) && !isNaN(bMax) && (bMin > 0 || bMax > 0);
+if (!hasBand) return true; // unbanded rows always eligible
+if (miles == null) return true; // no miles info - accept any band
+return miles >= bMin && miles <= bMax;
+}
 
-    if(SELECTED_MODE==="RAIL" && SELECTED_RAIL_EQ!=="ALL" && SELECTED_RAIL_EQ!=="COMPARE"){
-      const grp = railEquipGroup(r.equip);
-      if(grp !== SELECTED_RAIL_EQ) continue;
-    }
-
-    const scored = scoreRate(r, originFac, destCity, destState, destZip);
-    if(scored < 0) continue;
-
-    let priority = 0;
-    if(SELECTED_MODE === "RAIL"){
-      const grp = railEquipGroup(r.equip);
-      if(grp === "BOXCAR") priority = getBoxcarPriority(r.equip);
-      else if(grp === "CENTERBEAM") priority = getCenterbeamPriority(r.equip);
-      else priority = 999;
-    }
-
-    if(
-      scored > bestScore ||
-      (scored === bestScore && priority < bestPriority)
-    ){
-      bestScore = scored;
-      bestPriority = priority;
-      best = { ...r, score: scored };
-    }
-  }
-  return bestScore >= 0 ? best : null;
+function findRate(originFac, destCity, destState, destZip, miles){
+let best=null, bestScore=-1, bestPriority=999;
+for(const r of RATES){
+if(r.mode !== SELECTED_MODE) continue;
+if(SELECTED_MODE==="RAIL" && SELECTED_RAIL_EQ!=="ALL" && SELECTED_RAIL_EQ!=="COMPARE"){
+const grp = railEquipGroup(r.equip);
+if(grp !== SELECTED_RAIL_EQ) continue;
+}
+const scored = scoreRate(r, originFac, destCity, destState, destZip);
+if(scored < 0) continue;
+if(!rateMatchesBand(r, miles)) continue;
+let priority = 0;
+if(SELECTED_MODE === "RAIL"){
+const grp = railEquipGroup(r.equip);
+if(grp === "BOXCAR") priority = getBoxcarPriority(r.equip);
+else if(grp === "CENTERBEAM") priority = getCenterbeamPriority(r.equip);
+else priority = 999;
+}
+if(
+scored > bestScore ||
+(scored === bestScore && priority < bestPriority)
+){
+bestScore = scored;
+bestPriority = priority;
+best = { ...r, score: scored };
+}
+}
+return bestScore >= 0 ? best : null;
 }
 
 function findRateByGroup(originFac, destCity, destState, destZip, group){
-  let best = null;
-  let bestScore = -1;
-  let bestPriority = 999;
-
-  for(const r of RATES){
-    if(r.mode !== "RAIL") continue;
-    if(railEquipGroup(r.equip) !== group) continue;
-
-    const scored = scoreRate(r, originFac, destCity, destState, destZip);
-    if(scored < 0) continue;
-
-    let priority = 0;
-    if(group === "BOXCAR"){
-      priority = getBoxcarPriority(r.equip);
-    } else if(group === "CENTERBEAM"){
-      priority = getCenterbeamPriority(r.equip);
-    }
-
-    if(
-      scored > bestScore ||
-      (scored === bestScore && priority < bestPriority)
-    ){
-      bestScore = scored;
-      bestPriority = priority;
-      best = { ...r, score: scored };
-    }
-  }
-
-  return bestScore >= 0 ? best : null;
+let best = null;
+let bestScore = -1;
+let bestPriority = 999;
+for(const r of RATES){
+if(r.mode !== "RAIL") continue;
+if(railEquipGroup(r.equip) !== group) continue;
+const scored = scoreRate(r, originFac, destCity, destState, destZip);
+if(scored < 0) continue;
+let priority = 0;
+if(group === "BOXCAR"){
+priority = getBoxcarPriority(r.equip);
+} else if(group === "CENTERBEAM"){
+priority = getCenterbeamPriority(r.equip);
+}
+if(
+scored > bestScore ||
+(scored === bestScore && priority < bestPriority)
+){
+bestScore = scored;
+bestPriority = priority;
+best = { ...r, score: scored };
+}
+}
+return bestScore >= 0 ? best : null;
 }
 
 function scoreRate(r, originFac, destCity, destState, destZip){
-  let origScore=0;
-  if(r.origLoc){
-    if(nc(r.origLoc) === nc(originFac)) origScore=3;
-    else return -1;
-  }else{
-    origScore=1;
-  }
-
-  let destScore=0;
-  if(r.destLoc){
-    const city = nc(r.destLoc);
-    const st = (r.destLoc.split(",")[1]||"").trim().toUpperCase();
-    if(destCity && city===destCity) destScore=3;
-    else if(destState && st===destState) destScore=2;
-    else return -1;
-  }else if(r.destPostal){
-    if(destZip){
-      const dz = destZip.replace(/[^0-9A-Z]/g,"");
-      const pz = nc(r.destPostal).replace(/[^0-9A-Z]/g,"");
-      if(dz===pz || dz.startsWith(pz) || pz.startsWith(dz.substring(0,3))) destScore=3;
-      else return -1;
-    }else{
-      return -1;
-    }
-  }else{
-    destScore=1;
-  }
-
-  return origScore*10 + destScore;
+let origScore=0;
+if(r.origLoc){
+if(nc(r.origLoc) === nc(originFac)) origScore=3;
+else return -1;
+}else if(r.origStateField){
+// State-only origin
+const st = (r.origStateField.split(",")[0]||"").trim().toUpperCase();
+const originSt = (originFac.split(",")[1]||"").trim().toUpperCase();
+if(originSt && st === originSt) origScore=2;
+else return -1;
+}else{
+origScore=1;
+}
+let destScore=0;
+if(r.destLoc){
+const city = nc(r.destLoc);
+const st = (r.destLoc.split(",")[1]||"").trim().toUpperCase();
+if(destCity && city===destCity) destScore=3;
+else if(destState && st===destState) destScore=2;
+else return -1;
+}else if(r.destPostal){
+if(destZip){
+const dz = destZip.replace(/[^0-9A-Z]/g,"");
+const pz = nc(r.destPostal).replace(/[^0-9A-Z]/g,"");
+if(dz===pz || dz.startsWith(pz) || pz.startsWith(dz.substring(0,3))) destScore=3;
+else return -1;
+}else if(destState){
+// Fall back to state match using the destPostal's state portion
+const postParts = r.destPostal.split(",");
+const postSt = (postParts[1]||"").trim().toUpperCase();
+if(postSt && postSt === destState) destScore=2;
+else return -1;
+}else{
+return -1;
+}
+}else if(r.destStateField){
+const st = (r.destStateField.split(",")[0]||"").trim().toUpperCase();
+if(destState && st === destState) destScore=2;
+else return -1;
+}else{
+destScore=1;
+}
+return origScore*10 + destScore;
 }
 
 function displayResults(match, miles){
-  currentMatch = match;
-  currentCompareMatches = null;
-
-  const badge = document.getElementById("matchBadge");
-  const rateTypeBadge = document.getElementById("rateTypeBadge");
-  const content = document.getElementById("resultsContent");
-
-  if(!match){
-    badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
-    rateTypeBadge.textContent = "";
-    content.innerHTML = '<div class="no-results">No rate found for this origin/destination with the current filters.</div>';
-    return;
-  }
-
-  const quality = match.score>=30 ? "exact" : match.score>=20 ? "partial" : "estimated";
-  badge.innerHTML = quality==="exact"
-    ? '<span class="match-badge match-exact">✓ Exact Match</span>'
-    : quality==="partial"
-    ? '<span class="match-badge match-partial">≈ Partial Match</span>'
-    : '<span class="match-badge match-none">~ Estimated</span>';
-
-  const isMI = (match.uom||"").toString().toUpperCase() === "MI";
-  rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}</span>`;
-
-  const currency = match.currency || "USD";
-  const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
-  const minCharge = Number(match.minCharge)||0;
-
-  const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
-  const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : null;
-  const milesLabel  = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
-  const milesFailed = isMI && miles==null;
-
-  const gpAvg = isMI ? gpRate*milesActual : gpRate;
-  const gpFuel = isMI ? gpRate*milesActual*0.25 : gpRate*0.18;
-
-  window._matchData = { type:"single", isMI, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM };
-
-  const milesNote = milesFailed
-    ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
-    : (isMI && miles!=null)
-    ? ' <span style="font-size:11px;color:#16a34a;font-style:italic;">via Google Maps</span>'
-    : '';
-
-  content.innerHTML = `
-  <table>
-    <thead>
-      <tr><th>Item</th><th>GP Rate</th><th>Adjust Rate</th><th>% Difference</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Miles${milesNote}</td>
-        <td class="mono">${milesLabel}</td>
-        <td class="mono">${milesLabel}</td>
-        <td class="mono diff-zero">—</td>
-      </tr>
-      <tr>
-        <td>Rate Per Mile</td>
-        <td class="mono" id="gpRPM">${isMI ? fmt(gpRate,currency) : (derivedRPM != null ? fmt(derivedRPM,currency) : "—")}<span class="currency-badge">${currency}</span></td>
-        <td class="mono" id="adjRPM">${isMI ? fmt(0,currency) : "—"}</td>
-        <td class="mono diff-zero" id="diffRPM">—</td>
-      </tr>
-      <tr>
-        <td>Fuel Per Load</td>
-        <td class="mono" id="gpFuelCell">${fmt(gpFuel,currency)}<span class="currency-badge">${currency}</span></td>
-        <td class="mono" id="adjFuelCell">${fmt(gpFuel,currency)}</td>
-        <td class="mono diff-zero" id="diffFuel">—</td>
-      </tr>
-      <tr>
-        <td>Avg Rate Per Load</td>
-        <td class="mono" id="gpAvgCell">${fmt(gpAvg,currency)}<span class="currency-badge">${currency}</span></td>
-        <td class="mono" id="adjAvgCell">${fmt(0,currency)}</td>
-        <td class="mono diff-zero" id="diffAvg">—</td>
-      </tr>
-    </tbody>
-    <tfoot>
-      <tr class="total-row">
-        <td>Total Freight Per Load</td>
-        <td class="mono" id="totalGP">${fmt(0,currency)}</td>
-        <td class="mono" id="totalAdj">${fmt(0,currency)}</td>
-        <td class="mono diff-zero" id="totalDiff">—</td>
-      </tr>
-    </tfoot>
-  </table>`;
-
-  document.getElementById("pctAdj").value = 0;
-  recalc();
-  // Append Truck vs Rail comparison box below the rates table
-  if(SELECTED_MODE === "TRUCK" && window._lastQuery){
-    const { originFac, destCity, destState, destZip } = window._lastQuery;
-    const railMatch = findBestRailForRoute(originFac, destCity, destState, destZip);
-    // Store rail total for use in recalc()
-    if(railMatch){
-      const isRailMI = (railMatch.uom||"").toString().toUpperCase() === "MI";
-      const railGpRate = isRailMI ? (Number(railMatch.rate)||0) : (Number(railMatch.flat)||0);
-      const railMinCharge = Number(railMatch.minCharge)||0;
-      const railMilesActual = (isRailMI && miles != null) ? miles : (isRailMI ? 500 : 0);
-      const railAvg = isRailMI ? railGpRate * railMilesActual : railGpRate;
-      const railFuel = isRailMI ? railGpRate * railMilesActual * 0.25 : railGpRate * 0.18;
-      window._lastRailTotal = Math.max(railAvg + railFuel, railMinCharge);
-    } else {
-      window._lastRailTotal = null;
-    }
-    const compHtml = renderTruckRailComparison(match, railMatch, miles);
-    if(compHtml){
-      const resultsCard = document.getElementById("resultsCard");
-      let existing = document.getElementById("truckRailCompareBox");
-      if(existing) existing.remove();
-      const div = document.createElement("div");
-      div.id = "truckRailCompareBox";
-      div.innerHTML = compHtml;
-      resultsCard.appendChild(div);
-    }
-  } else {
-    const existing = document.getElementById("truckRailCompareBox");
-    if(existing) existing.remove();
-  }
+currentMatch = match;
+currentCompareMatches = null;
+const badge = document.getElementById("matchBadge");
+const rateTypeBadge = document.getElementById("rateTypeBadge");
+const content = document.getElementById("resultsContent");
+if(!match){
+badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
+rateTypeBadge.textContent = "";
+content.innerHTML = '<div class="no-results">No rate found for this origin/destination with the current filters.</div>';
+return;
+}
+const quality = match.score>=30 ? "exact" : match.score>=20 ? "partial" : "estimated";
+badge.innerHTML = quality==="exact"
+? '<span class="match-badge match-exact">✓ Exact Match</span>'
+: quality==="partial"
+? '<span class="match-badge match-partial">≈ Partial Match</span>'
+: '<span class="match-badge match-none">~ Estimated</span>';
+const isMI = (match.uom||"").toString().toUpperCase() === "MI";
+const equipLabel = match.equip ? ` &nbsp;·&nbsp; <span style="font-size:11px;color:#475569;font-weight:600;">${match.equip}</span>` : "";
+rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}</span>`;
+const currency = match.currency || "USD";
+const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
+const minCharge = Number(match.minCharge)||0;
+const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
+const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : null;
+const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
+const milesFailed = isMI && miles==null;
+const gpAvg = isMI ? gpRate*milesActual : gpRate;
+const gpFuel = isMI ? gpRate*milesActual*0.25 : gpRate*0.18;
+window._matchData = { type:"single", isMI, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM };
+const milesNote = milesFailed
+? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
+: (isMI && miles!=null)
+? ' <span style="font-size:11px;color:#16a34a;font-style:italic;">via Google Maps</span>'
+: '';
+content.innerHTML = `
+<table>
+<thead>
+<tr><th>Item</th><th>GP Rate</th><th>Adjust Rate</th><th>% Difference</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>Miles${milesNote}</td>
+<td class="mono">${milesLabel}</td>
+<td class="mono">${milesLabel}</td>
+<td class="mono diff-zero">—</td>
+</tr>
+<tr>
+<td>Rate Per Mile</td>
+<td class="mono" id="gpRPM">${isMI ? fmt(gpRate,currency) : (derivedRPM != null ? fmt(derivedRPM,currency) : "—")}<span class="currency-badge">${currency}</span></td>
+<td class="mono" id="adjRPM">${isMI ? fmt(0,currency) : "—"}</td>
+<td class="mono diff-zero" id="diffRPM">—</td>
+</tr>
+<tr>
+<td>Fuel Per Load</td>
+<td class="mono" id="gpFuelCell">${fmt(gpFuel,currency)}<span class="currency-badge">${currency}</span></td>
+<td class="mono" id="adjFuelCell">${fmt(gpFuel,currency)}</td>
+<td class="mono diff-zero" id="diffFuel">—</td>
+</tr>
+<tr>
+<td>Avg Rate Per Load</td>
+<td class="mono" id="gpAvgCell">${fmt(gpAvg,currency)}<span class="currency-badge">${currency}</span></td>
+<td class="mono" id="adjAvgCell">${fmt(0,currency)}</td>
+<td class="mono diff-zero" id="diffAvg">—</td>
+</tr>
+</tbody>
+<tfoot>
+<tr class="total-row">
+<td>Total Freight Per Load</td>
+<td class="mono" id="totalGP">${fmt(0,currency)}</td>
+<td class="mono" id="totalAdj">${fmt(0,currency)}</td>
+<td class="mono diff-zero" id="totalDiff">—</td>
+</tr>
+</tfoot>
+</table>`;
+document.getElementById("pctAdj").value = 0;
+recalc();
 }
 
 function displayCompareResults(boxcar, centerbeam, miles){
-  currentMatch = null;
-  currentCompareMatches = { boxcar, centerbeam };
+currentMatch = null;
+currentCompareMatches = { boxcar, centerbeam, miles };
+const badge = document.getElementById("matchBadge");
+const rateTypeBadge = document.getElementById("rateTypeBadge");
+const content = document.getElementById("resultsContent");
+if(!boxcar && !centerbeam){
+badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
+rateTypeBadge.textContent = "";
+content.innerHTML = '<div class="no-results">No boxcar or centerbeam rates found for this origin/destination.</div>';
+return;
+}
+badge.innerHTML = '<span class="match-badge match-exact">Compare Mode</span>';
+rateTypeBadge.innerHTML = '<span style="font-size:12px;color:#1e293b;margin-left:4px;">Boxcar vs Centerbeam</span>';
 
-  const badge = document.getElementById("matchBadge");
-  const rateTypeBadge = document.getElementById("rateTypeBadge");
-  const content = document.getElementById("resultsContent");
+const bcCur = boxcar?.currency || "USD";
+const cbCur = centerbeam?.currency || "USD";
+const bcTotal = boxcar ? (Number(boxcar.flat)||0) : null;
+const cbTotal = centerbeam ? (Number(centerbeam.flat)||0) : null;
 
-  if(!boxcar && !centerbeam){
-    badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
-    rateTypeBadge.textContent = "";
-    content.innerHTML = '<div class="no-results">No Boxcar or Centerbeam rate found for this origin/destination.</div>';
-    return;
-  }
-
-  badge.innerHTML = '<span class="match-badge match-partial">⇄ Comparing Both</span>';
-  rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">Rail Comparison</span>`;
-
-  const winner = getCompareWinner(boxcar, centerbeam);
-  const winnerHtml = winner ? `<div class="compare-winner">Lower Cost Option: ${winner}</div>` : "";
-
-  content.innerHTML = `
-    ${winnerHtml}
-    <div class="compare-grid">
-      ${renderCompareCard("Boxcar", boxcar, miles, "boxcar")}
-      ${renderCompareCard("Centerbeam", centerbeam, miles, "centerbeam")}
-    </div>
-  `;
-
-  document.getElementById("pctAdj").value = 0;
-
-  window._matchData = {
-    type:"compare",
-    boxcar: buildCompareData(boxcar, miles),
-    centerbeam: buildCompareData(centerbeam, miles)
-  };
-
-  recalc();
+let winnerNote = "";
+if(bcTotal != null && cbTotal != null){
+const diff = bcTotal - cbTotal;
+if(Math.abs(diff) < 0.01){
+winnerNote = `<div class="compare-winner">📊 Boxcar and Centerbeam are priced equally at ${fmt(bcTotal,bcCur)}.</div>`;
+}else if(diff < 0){
+winnerNote = `<div class="compare-winner">💰 Boxcar saves ${fmt(Math.abs(diff),bcCur)} (${((Math.abs(diff)/cbTotal)*100).toFixed(1)}%) vs Centerbeam.</div>`;
+}else{
+winnerNote = `<div class="compare-winner">💰 Centerbeam saves ${fmt(Math.abs(diff),cbCur)} (${((Math.abs(diff)/bcTotal)*100).toFixed(1)}%) vs Boxcar.</div>`;
+}
 }
 
-function buildCompareData(match, miles){
-  if(!match) return null;
-  const isMI = (match.uom||"").toString().toUpperCase() === "MI";
-  const currency = match.currency || "USD";
-  const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
-  const minCharge = Number(match.minCharge)||0;
-  const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
-  const gpAvg = isMI ? gpRate*milesActual : gpRate;
-  const gpFuel = isMI ? gpRate*milesActual*0.25 : gpRate*0.18;
-  return { isMI, currency, gpRate, minCharge, gpAvg, gpFuel };
+const cardHtml = (label, m, cur, total) => {
+if(!m) return `<div class="compare-card"><div class="compare-title">${label}</div><div style="padding:16px;color:var(--text-muted);font-size:13px;">No rate found.</div></div>`;
+return `<div class="compare-card">
+<div class="compare-title">${label} &nbsp;·&nbsp; <span style="font-weight:500;color:var(--text-muted);">${m.equip||""}</span></div>
+<div style="padding:14px 16px;">
+<div class="truck-rail-row"><span class="truck-rail-label">Equipment</span><span class="truck-rail-value">${m.equip||"—"}</span></div>
+<div class="truck-rail-row"><span class="truck-rail-label">Currency</span><span class="truck-rail-value">${cur}</span></div>
+<div class="truck-rail-row"><span class="truck-rail-label">Total Rate</span><span class="truck-rail-value">${fmt(total,cur)}</span></div>
+</div>
+</div>`;
+};
+
+content.innerHTML = `
+${winnerNote}
+<div class="compare-grid">
+${cardHtml("Boxcar", boxcar, bcCur, bcTotal)}
+${cardHtml("Centerbeam", centerbeam, cbCur, cbTotal)}
+</div>`;
 }
 
-function renderCompareCard(title, match, miles, key){
-  if(!match){
-    return `
-      <div class="compare-card">
-        <div class="compare-title">${title}</div>
-        <div class="no-results" style="padding:32px 20px;">No matching rate found.</div>
-      </div>
-    `;
-  }
-
-  const isMI = (match.uom||"").toString().toUpperCase() === "MI";
-  const currency = match.currency || "USD";
-  const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
-  const minCharge = Number(match.minCharge)||0;
-  const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
-  const milesLabel  = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
-  const gpAvg = isMI ? gpRate*milesActual : gpRate;
-  const gpFuel = isMI ? gpRate*milesActual*0.25 : gpRate*0.18;
-  const total = Math.max(gpAvg + gpFuel, minCharge);
-
-  return `
-    <div class="compare-card">
-      <div class="compare-title">${title}${match.equip ? ` <span style="color:#64748b;font-weight:600;">(${match.equip})</span>` : ""}</div>
-      <table>
-        <thead>
-          <tr><th>Item</th><th>GP Rate</th><th>Adjust Rate</th><th>% Difference</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Miles</td>
-            <td class="mono">${milesLabel}</td>
-            <td class="mono">${milesLabel}</td>
-            <td class="mono diff-zero">—</td>
-          </tr>
-          <tr>
-            <td>Rate Per Mile</td>
-            <td class="mono" id="${key}_gpRPM">${isMI ? fmt(gpRate,currency) : "—"}<span class="currency-badge">${currency}</span></td>
-            <td class="mono" id="${key}_adjRPM">${isMI ? fmt(0,currency) : "—"}</td>
-            <td class="mono diff-zero" id="${key}_diffRPM">—</td>
-          </tr>
-          <tr>
-            <td>Fuel Per Load</td>
-            <td class="mono" id="${key}_gpFuel">${fmt(gpFuel,currency)}<span class="currency-badge">${currency}</span></td>
-            <td class="mono" id="${key}_adjFuel">${fmt(gpFuel,currency)}</td>
-            <td class="mono diff-zero" id="${key}_diffFuel">—</td>
-          </tr>
-          <tr>
-            <td>Avg Rate Per Load</td>
-            <td class="mono" id="${key}_gpAvg">${fmt(gpAvg,currency)}<span class="currency-badge">${currency}</span></td>
-            <td class="mono" id="${key}_adjAvg">${fmt(0,currency)}</td>
-            <td class="mono diff-zero" id="${key}_diffAvg">—</td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr class="total-row">
-            <td>Total Freight Per Load</td>
-            <td class="mono" id="${key}_totalGP">${fmt(total,currency)}<span class="currency-badge">${currency}</span></td>
-            <td class="mono" id="${key}_totalAdj">${fmt(0,currency)}</td>
-            <td class="mono diff-zero" id="${key}_totalDiff">—</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  `;
+function fmt(n, currency){
+if(n == null || isNaN(n)) return "—";
+const sign = currency === "CAD" ? "C$" : "$";
+return sign + Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
-function getCompareWinner(boxcar, centerbeam){
-  const b = buildCompareData(boxcar, null);
-  const c = buildCompareData(centerbeam, null);
-  if(!b && !c) return "";
-  if(b && !c) return "Boxcar";
-  if(!b && c) return "Centerbeam";
+function fmtPct(n){
+if(n == null || isNaN(n) || !isFinite(n)) return "—";
+const s = n >= 0 ? "+" : "";
+return s + Number(n).toFixed(1) + "%";
+}
 
-  const bTotal = Math.max(b.gpAvg + b.gpFuel, b.minCharge);
-  const cTotal = Math.max(c.gpAvg + c.gpFuel, c.minCharge);
-
-  if(bTotal < cTotal) return "Boxcar";
-  if(cTotal < bTotal) return "Centerbeam";
-  return "Tie";
+function pctClass(n){
+if(n == null || isNaN(n) || Math.abs(n) < 0.05) return "diff-zero";
+return n > 0 ? "diff-positive" : "diff-negative";
 }
 
 function recalc(){
-  if(!window._matchData) return;
-  const adjPct = parseFloat(document.getElementById("pctAdj")?.value) || 0;
-  const mult = 1 + adjPct/100;
+const data = window._matchData;
+if(!data || data.type !== "single") return;
+const pct = Number(document.getElementById("pctAdj").value) || 0;
+const factor = 1 + pct/100;
+const { isMI, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM } = data;
 
-  if(window._matchData.type === "single"){
-    const { isMI, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM } = window._matchData;
+const adjAvg = Math.max(gpAvg * factor, minCharge);
+const adjFuel = gpFuel * factor;
+const adjRPM = isMI ? gpRate * factor : null;
 
-    const adjAvg = gpAvg * mult;
-    const adjRPM = isMI ? gpRate * mult : (derivedRPM != null ? derivedRPM * mult : 0);
-    const gpTotal = Math.max(gpAvg + gpFuel, minCharge);
-    const adjTotal = Math.max(adjAvg + gpFuel, minCharge);
+const gpTotal = gpAvg + gpFuel;
+const adjTotal = adjAvg + adjFuel;
+const totalPct = gpTotal > 0 ? ((adjTotal - gpTotal) / gpTotal) * 100 : 0;
 
-    const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.innerHTML = val; };
+const setCell = (id, html, cls) => {
+const el = document.getElementById(id);
+if(!el) return;
+el.innerHTML = html;
+if(cls){ el.className = "mono " + cls; }
+};
 
-    if(isMI || derivedRPM != null){
-      const baseRPM = isMI ? gpRate : derivedRPM;
-      set("adjRPM", fmt(adjRPM,currency));
-      set("diffRPM", `<span class="${dc(pct(adjRPM,baseRPM))}">${fp(pct(adjRPM,baseRPM))}</span>`);
-    }
-    set("adjFuelCell", fmt(gpFuel,currency));
-    set("diffFuel", `<span class="mono diff-zero">—</span>`);
-    set("adjAvgCell", fmt(adjAvg,currency));
-    set("diffAvg", `<span class="${dc(pct(adjAvg,gpAvg))}">${fp(pct(adjAvg,gpAvg))}</span>`);
-    set("totalGP", `${fmt(gpTotal,currency)}<span class="currency-badge">${currency}</span>`);
-    set("totalAdj", `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span>`);
-    set("totalDiff", `<span class="${dc(pct(adjTotal,gpTotal))}">${fp(pct(adjTotal,gpTotal))}</span>`);
-
-    // Update Truck vs Rail comparison box with adjusted total
-    const compBox = document.getElementById("truckRailCompareBox");
-    if(compBox && window._lastQuery){
-      const adjEq4 = adjTotal * 4;
-      // Get current rail total from the DOM (it doesn't change with % adj)
-      // Update truck side values
-      const setEl = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
-      setEl("trComp_truckTotal", fmt(adjTotal, currency));
-      setEl("trComp_truckEq4", fmt(adjEq4, currency));
-      setEl("trComp_truckFinalVal", fmt(adjEq4, currency));
-
-      // Get rail total from stored _matchData
-      const railTotalVal = window._lastRailTotal || null;
-
-      // Update winner banner
-      const banner = compBox.querySelector(".truck-rail-winner-banner");
-      if(banner && railTotalVal != null){
-        if(adjEq4 < railTotalVal){
-          banner.className = "truck-rail-winner-banner truck-rail-winner-truck";
-          banner.textContent = "Truck (x4) is the Lower Cost Option";
-        } else if(railTotalVal < adjEq4){
-          banner.className = "truck-rail-winner-banner truck-rail-winner-rail";
-          banner.textContent = "Rail is the Lower Cost Option";
-        } else {
-          banner.className = "truck-rail-winner-banner truck-rail-winner-tie";
-          banner.textContent = "Tie -- Both Options Are Equal Cost";
-        }
-      }
-    }
-    return;
-  }
-
-  if(window._matchData.type === "compare"){
-    updateCompareCard("boxcar", window._matchData.boxcar, mult);
-    updateCompareCard("centerbeam", window._matchData.centerbeam, mult);
-  }
+if(isMI){
+setCell("adjRPM", `${fmt(adjRPM,currency)}<span class="currency-badge">${currency}</span>`);
+const rpmPct = gpRate > 0 ? ((adjRPM - gpRate)/gpRate)*100 : 0;
+setCell("diffRPM", fmtPct(rpmPct), pctClass(rpmPct));
+}else if(derivedRPM != null){
+const adjDerived = derivedRPM * factor;
+setCell("adjRPM", `${fmt(adjDerived,currency)}<span class="currency-badge">${currency}</span>`);
+const rpmPct = derivedRPM > 0 ? ((adjDerived - derivedRPM)/derivedRPM)*100 : 0;
+setCell("diffRPM", fmtPct(rpmPct), pctClass(rpmPct));
 }
 
-function updateCompareCard(prefix, data, mult){
-  if(!data) return;
+setCell("adjFuelCell", `${fmt(adjFuel,currency)}<span class="currency-badge">${currency}</span>`);
+const fuelPct = gpFuel > 0 ? ((adjFuel - gpFuel)/gpFuel)*100 : 0;
+setCell("diffFuel", fmtPct(fuelPct), pctClass(fuelPct));
 
-  const { isMI, currency, gpRate, minCharge, gpAvg, gpFuel } = data;
-  const adjAvg = gpAvg * mult;
-  const adjRPM = isMI ? gpRate * mult : 0;
-  const gpTotal = Math.max(gpAvg + gpFuel, minCharge);
-  const adjTotal = Math.max(adjAvg + gpFuel, minCharge);
+setCell("adjAvgCell", `${fmt(adjAvg,currency)}<span class="currency-badge">${currency}</span>`);
+const avgPct = gpAvg > 0 ? ((adjAvg - gpAvg)/gpAvg)*100 : 0;
+setCell("diffAvg", fmtPct(avgPct), pctClass(avgPct));
 
-  const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.innerHTML = val; };
-
-  if(isMI){
-    set(`${prefix}_adjRPM`, fmt(adjRPM,currency));
-    set(`${prefix}_diffRPM`, `<span class="${dc(pct(adjRPM,gpRate))}">${fp(pct(adjRPM,gpRate))}</span>`);
-  }
-  set(`${prefix}_adjFuel`, fmt(gpFuel,currency));
-  set(`${prefix}_diffFuel`, `<span class="mono diff-zero">—</span>`);
-  set(`${prefix}_adjAvg`, fmt(adjAvg,currency));
-  set(`${prefix}_diffAvg`, `<span class="${dc(pct(adjAvg,gpAvg))}">${fp(pct(adjAvg,gpAvg))}</span>`);
-  set(`${prefix}_totalAdj`, `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span>`);
-  set(`${prefix}_totalDiff`, `<span class="${dc(pct(adjTotal,gpTotal))}">${fp(pct(adjTotal,gpTotal))}</span>`);
+setCell("totalGP", `${fmt(gpTotal,currency)}<span class="currency-badge">${currency}</span>`);
+setCell("totalAdj", `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span>`);
+setCell("totalDiff", fmtPct(totalPct), pctClass(totalPct));
+window._lastRailTotal = adjTotal;
 }
-
-function fmt(val,currency){
-  if(val==null || isNaN(val)) return "$0.00";
-  return new Intl.NumberFormat("en-US",{style:"currency",currency:currency||"USD",minimumFractionDigits:2,maximumFractionDigits:2}).format(val);
-}
-function pct(a,b){ return (!b||b===0)?0:((a-b)/Math.abs(b))*100; }
-function fp(v){ return (v>=0?"+":"")+v.toFixed(2)+"%"; }
-function dc(v){ return Math.abs(v)<0.01 ? "mono diff-zero" : v>0 ? "mono diff-positive" : "mono diff-negative"; }
 
 function clearForm(){
-  ["originFacility","originCity","originState","originZip","destCity","destState","destZip"].forEach(id=>{
-    const el=document.getElementById(id); if(el) el.value="";
-  });
-  hideZipPicker();
-  document.getElementById("errorBanner")?.classList.remove("show");
-  clearResultsOnly();
-  LAST_DEST_CITY=""; LAST_DEST_STATE=""; LAST_DEST_ZIPS=[];
+document.getElementById("originFacility").value = "";
+document.getElementById("originCity").value = "";
+document.getElementById("originState").value = "";
+document.getElementById("originZip").value = "";
+document.getElementById("destCity").value = "";
+document.getElementById("destState").value = "";
+document.getElementById("destZip").value = "";
+document.getElementById("pctAdj").value = 0;
+document.getElementById("errorBanner")?.classList.remove("show");
+LAST_DEST_ZIPS = [];
+hideZipPicker();
+clearResultsOnly();
 }
-
-// --- Truck vs Rail Comparison ---
-function findBestRailForRoute(originFac, destCity, destState, destZip){
-  let best = null, bestScore = -1, bestPriority = 999;
-  for(const r of RATES){
-    if(r.mode !== "RAIL") continue;
-    const scored = scoreRate(r, originFac, destCity, destState, destZip);
-    if(scored < 0) continue;
-    const grp = railEquipGroup(r.equip);
-    let priority = 0;
-    if(grp === "BOXCAR") priority = getBoxcarPriority(r.equip);
-    else if(grp === "CENTERBEAM") priority = getCenterbeamPriority(r.equip);
-    else priority = 999;
-    if(scored > bestScore || (scored === bestScore && priority < bestPriority)){
-      bestScore = scored;
-      bestPriority = priority;
-      best = { ...r, score: scored };
-    }
-  }
-  return bestScore >= 0 ? best : null;
-}
-
-function renderTruckRailComparison(truckMatch, railMatch, miles){
-  if(!truckMatch) return "";
-  const currency = truckMatch.currency || "USD";
-  const isTruckMI = (truckMatch.uom||"").toString().toUpperCase() === "MI";
-  const truckGpRate = isTruckMI ? (Number(truckMatch.rate)||0) : (Number(truckMatch.flat)||0);
-  const truckMinCharge = Number(truckMatch.minCharge)||0;
-  const truckMilesActual = (isTruckMI && miles != null) ? miles : (isTruckMI ? 500 : 0);
-  const truckAvg = isTruckMI ? truckGpRate * truckMilesActual : truckGpRate;
-  const truckFuel = isTruckMI ? truckGpRate * truckMilesActual * 0.25 : truckGpRate * 0.18;
-  const truckTotal = Math.max(truckAvg + truckFuel, truckMinCharge);
-  const truckEq4 = truckTotal * 4;
-
-  let railTotal = null;
-  let railEquipLabel = "";
-  if(railMatch){
-    const isRailMI = (railMatch.uom||"").toString().toUpperCase() === "MI";
-    const railGpRate = isRailMI ? (Number(railMatch.rate)||0) : (Number(railMatch.flat)||0);
-    const railMinCharge = Number(railMatch.minCharge)||0;
-    const railMilesActual = (isRailMI && miles != null) ? miles : (isRailMI ? 500 : 0);
-    const railAvg = isRailMI ? railGpRate * railMilesActual : railGpRate;
-    const railFuel = isRailMI ? railGpRate * railMilesActual * 0.25 : railGpRate * 0.18;
-    railTotal = Math.max(railAvg + railFuel, railMinCharge);
-    railEquipLabel = railMatch.equip ? ` (${railMatch.equip})` : "";
-  }
-
-  let winnerClass = "", winnerText = "";
-  if(railTotal == null){
-    winnerClass = "truck-rail-winner-tie";
-    winnerText = "No Rail Rate Found for This Route";
-  } else if(truckEq4 < railTotal){
-    winnerClass = "truck-rail-winner-truck";
-    winnerText = "Truck (x4) is the Lower Cost Option";
-  } else if(railTotal < truckEq4){
-    winnerClass = "truck-rail-winner-rail";
-    winnerText = "Rail is the Lower Cost Option";
-  } else {
-    winnerClass = "truck-rail-winner-tie";
-    winnerText = "Tie -- Both Options Are Equal Cost";
-  }
-
-  const railColHtml = railTotal != null ? `
-    <div class="truck-rail-col">
-      <div class="truck-rail-col-title">Rail${railEquipLabel}</div>
-      <div class="truck-rail-row"><span class="truck-rail-label">Total Per Rail Car</span><span class="truck-rail-value">${fmt(railTotal,currency)}</span></div>
-      <div class="truck-rail-total-row" id="trComp_railFinal"><span>Rail Total</span><span id="trComp_railFinalVal">${fmt(railTotal,currency)}</span></div>
-    </div>
-  ` : `
-    <div class="truck-rail-col">
-      <div class="truck-rail-col-title">Rail</div>
-      <div style="padding:24px 0;text-align:center;color:var(--text-muted);font-size:13px;">No rail rate found for this route.</div>
-    </div>
-  `;
-
-  return `<div class="truck-rail-compare">
-    <div class="truck-rail-compare-header">Truck vs. Rail Cost Comparison</div>
-    <div class="truck-rail-winner-banner ${winnerClass}">${winnerText}</div>
-    <div class="truck-rail-grid">
-      <div class="truck-rail-col">
-        <div class="truck-rail-col-title">Truck (x4 Equivalent)</div>
-        <div class="truck-rail-row"><span class="truck-rail-label">Total Per Truck Load</span><span class="truck-rail-value" id="trComp_truckTotal">${fmt(truckTotal,currency)}</span></div>
-        <div class="truck-rail-row"><span class="truck-rail-label">x 4 Trucks (1 Rail Car Equiv.)</span><span class="truck-rail-value" id="trComp_truckEq4">${fmt(truckEq4,currency)}</span></div>
-        <div class="truck-rail-total-row" id="trComp_truckFinal"><span>Truck x4 Total</span><span id="trComp_truckFinalVal">${fmt(truckEq4,currency)}</span></div>
-      </div>
-      ${railColHtml}
-    </div>
-    <div class="truck-rail-note">Rule of thumb: 4 truck loads = 1 rail car. Truck x4 total vs. rail total shown above.</div>
-  </div>`;
-}
-
 
 loadRates();
 </script>
