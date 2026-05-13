@@ -238,6 +238,7 @@ MattGPT Freight Estimate Tool
 const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg";
 let RATES = [];
 let ORIGIN_ZIPS = {};
+let RAIL_DEST_CITIES = [];  // [[city, state, country], ...] from rates.json for autocomplete
 let currentMatch = null;
 let currentCompareMatches = null;
 let SELECTED_MODE = "TRUCK";
@@ -373,6 +374,7 @@ if(!res.ok) throw new Error("HTTP "+res.status);
 const data = await res.json();
 RATES = (data.rates || []).map(normRow).filter(Boolean);
 ORIGIN_ZIPS = data.origin_zips || {};
+RAIL_DEST_CITIES = data.rail_dest_cities || [];
 buildUI();
 const truckCount = RATES.filter(r=>r.mode==="TRUCK").length;
 const railCount = RATES.filter(r=>r.mode==="RAIL").length;
@@ -487,15 +489,20 @@ refreshOriginOptions();
 const zipInput = document.getElementById("destZip");
 zipInput?.addEventListener("focus", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
 zipInput?.addEventListener("click", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
+
+// Rail-data city autocomplete fallback (handles small towns Google Places hides)
+const cityInput = document.getElementById("destCity");
+cityInput?.addEventListener("input", onDestCityInput);
+cityInput?.addEventListener("focus", onDestCityInput);
+
 document.addEventListener("click",(e)=>{
-const picker = document.getElementById("zipPicker");
-if(!picker) return;
-if(e.target.closest("#zipPicker")) return;
-if(e.target.closest("#destZip")) return;
-hideZipPicker();
+const zp = document.getElementById("zipPicker");
+const rcp = document.getElementById("railCityPicker");
+if(zp && !e.target.closest("#zipPicker") && !e.target.closest("#destZip")) hideZipPicker();
+if(rcp && !e.target.closest("#railCityPicker") && !e.target.closest("#destCity")) hideRailCityPicker();
 },{capture:true});
-window.addEventListener("scroll",()=>hideZipPicker(),{passive:true});
-window.addEventListener("resize",()=>hideZipPicker(),{passive:true});
+window.addEventListener("scroll",()=>{ hideZipPicker(); hideRailCityPicker(); },{passive:true});
+window.addEventListener("resize",()=>{ hideZipPicker(); hideRailCityPicker(); },{passive:true});
 initDestinationAutocomplete();
 }
 
@@ -628,6 +635,61 @@ function hideZipPicker(){
 document.getElementById("zipPicker")?.remove();
 const hint = document.getElementById("zipHint");
 if(hint) hint.style.display="none";
+}
+
+function hideRailCityPicker(){
+document.getElementById("railCityPicker")?.remove();
+}
+
+function showRailCityPicker(matches){
+hideRailCityPicker();
+if(!matches || !matches.length) return;
+const cityInput = document.getElementById("destCity");
+if(!cityInput) return;
+const picker = document.createElement("div");
+picker.id = "railCityPicker";
+picker.className = "zip-picker";
+picker.innerHTML = matches.slice(0, 30).map(m => `
+<div class="zip-item" data-city="${m[0]}" data-state="${m[1]}">
+<strong>${m[0]}</strong>, ${m[1]} <span style="color:var(--text-muted);font-size:11px;">(rail destination)</span>
+</div>
+`).join("");
+picker.addEventListener("click", (e) => {
+const row = e.target.closest(".zip-item");
+if(!row) return;
+const city = row.getAttribute("data-city") || "";
+const state = row.getAttribute("data-state") || "";
+cityInput.value = city;
+const stateEl = document.getElementById("destState");
+if(stateEl) stateEl.value = state;
+LAST_DEST_CITY = city;
+LAST_DEST_STATE = state;
+hideRailCityPicker();
+cityInput.focus();
+});
+document.body.appendChild(picker);
+const r = cityInput.getBoundingClientRect();
+const pad = 10;
+const spaceBelow = window.innerHeight - r.bottom - pad;
+const spaceAbove = r.top - pad;
+const openDown = spaceBelow >= 260 || spaceBelow >= spaceAbove;
+const maxH = Math.max(160, Math.min(420, openDown ? spaceBelow : spaceAbove));
+picker.style.maxHeight = `${maxH}px`;
+picker.style.width = `${Math.max(r.width, 280)}px`;
+let left = r.left;
+left = Math.max(pad, Math.min(left, window.innerWidth - picker.offsetWidth - pad));
+picker.style.left = `${left}px`;
+picker.style.top = openDown
+? `${Math.min(r.bottom + 6, window.innerHeight - maxH - pad)}px`
+: `${Math.max(pad, r.top - maxH - 6)}px`;
+}
+
+function onDestCityInput(){
+if(SELECTED_MODE !== "RAIL") { hideRailCityPicker(); return; }
+const q = (document.getElementById("destCity").value || "").trim().toUpperCase();
+if(!q || q.length < 2){ hideRailCityPicker(); return; }
+const matches = RAIL_DEST_CITIES.filter(c => c[0].startsWith(q));
+showRailCityPicker(matches);
 }
 
 function showZipPicker(zips, city, state){
@@ -983,6 +1045,7 @@ badge.innerHTML = quality==="exact"
 ? '<span class="match-badge match-partial">≈ Partial Match</span>'
 : '<span class="match-badge match-none">~ Estimated</span>';
 const isMI = (match.uom||"").toString().toUpperCase() === "MI";
+const isRail = match.mode === "RAIL";
 const equipLabel = match.equip ? ` &nbsp;·&nbsp; <span style="font-size:11px;color:#475569;font-weight:600;">${match.equip}</span>` : "";
 rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}</span>`;
 const currency = match.currency || "USD";
@@ -993,8 +1056,9 @@ const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : nu
 const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
 const milesFailed = isMI && miles==null;
 const gpAvg = isMI ? gpRate*milesActual : gpRate;
-const gpFuel = isMI ? gpRate*milesActual*0.25 : gpRate*0.18;
-window._matchData = { type:"single", isMI, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM };
+// Rail rates already include fuel surcharge in the Grand Total - don't add it again
+const gpFuel = isRail ? 0 : (isMI ? gpRate*milesActual*0.25 : gpRate*0.18);
+window._matchData = { type:"single", isMI, isRail, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM };
 const milesNote = milesFailed
 ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
 : (isMI && miles!=null)
@@ -1018,14 +1082,23 @@ content.innerHTML = `
 <td class="mono" id="adjRPM">${isMI ? fmt(0,currency) : "—"}</td>
 <td class="mono diff-zero" id="diffRPM">—</td>
 </tr>
+${isRail ? `
+<tr>
+<td>Fuel Per Load <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(included in rate)</span></td>
+<td class="mono" style="color:var(--text-muted);">included</td>
+<td class="mono" style="color:var(--text-muted);">included</td>
+<td class="mono diff-zero">—</td>
+</tr>
+` : `
 <tr>
 <td>Fuel Per Load</td>
 <td class="mono" id="gpFuelCell">${fmt(gpFuel,currency)}<span class="currency-badge">${currency}</span></td>
 <td class="mono" id="adjFuelCell">${fmt(gpFuel,currency)}</td>
 <td class="mono diff-zero" id="diffFuel">—</td>
 </tr>
+`}
 <tr>
-<td>Avg Rate Per Load</td>
+<td>${isRail ? "Total Rate Per Load" : "Avg Rate Per Load"}</td>
 <td class="mono" id="gpAvgCell">${fmt(gpAvg,currency)}<span class="currency-badge">${currency}</span></td>
 <td class="mono" id="adjAvgCell">${fmt(0,currency)}</td>
 <td class="mono diff-zero" id="diffAvg">—</td>
@@ -1118,7 +1191,7 @@ const data = window._matchData;
 if(!data || data.type !== "single") return;
 const pct = Number(document.getElementById("pctAdj").value) || 0;
 const factor = 1 + pct/100;
-const { isMI, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM } = data;
+const { isMI, isRail, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM } = data;
 
 const adjAvg = Math.max(gpAvg * factor, minCharge);
 const adjFuel = gpFuel * factor;
@@ -1146,9 +1219,12 @@ const rpmPct = derivedRPM > 0 ? ((adjDerived - derivedRPM)/derivedRPM)*100 : 0;
 setCell("diffRPM", fmtPct(rpmPct), pctClass(rpmPct));
 }
 
+// Fuel cells only exist for non-rail (rail shows "included" placeholder)
+if(!isRail){
 setCell("adjFuelCell", `${fmt(adjFuel,currency)}<span class="currency-badge">${currency}</span>`);
 const fuelPct = gpFuel > 0 ? ((adjFuel - gpFuel)/gpFuel)*100 : 0;
 setCell("diffFuel", fmtPct(fuelPct), pctClass(fuelPct));
+}
 
 setCell("adjAvgCell", `${fmt(adjAvg,currency)}<span class="currency-badge">${currency}</span>`);
 const avgPct = gpAvg > 0 ? ((adjAvg - gpAvg)/gpAvg)*100 : 0;
