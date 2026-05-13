@@ -843,7 +843,7 @@ return miles >= bMin && miles <= bMax;
 }
 
 function findRate(originFac, destCity, destState, destZip, miles){
-let best=null, bestScore=-1, bestPriority=999;
+let best=null, bestScore=-1, bestPriority=999, bestPrice=Infinity;
 for(const r of RATES){
 if(r.mode !== SELECTED_MODE) continue;
 if(SELECTED_MODE==="RAIL" && SELECTED_RAIL_EQ!=="ALL" && SELECTED_RAIL_EQ!=="COMPARE"){
@@ -860,12 +860,17 @@ if(grp === "BOXCAR") priority = getBoxcarPriority(r.equip);
 else if(grp === "CENTERBEAM") priority = getCenterbeamPriority(r.equip);
 else priority = 999;
 }
+// Compare price for tiebreaking when score+priority tie (prefer cheapest)
+const isMI = (r.uom||"").toString().toUpperCase() === "MI";
+const price = isMI ? (Number(r.rate)||Infinity) : (Number(r.flat)||Infinity);
 if(
 scored > bestScore ||
-(scored === bestScore && priority < bestPriority)
+(scored === bestScore && priority < bestPriority) ||
+(scored === bestScore && priority === bestPriority && price < bestPrice)
 ){
 bestScore = scored;
 bestPriority = priority;
+bestPrice = price;
 best = { ...r, score: scored };
 }
 }
@@ -876,6 +881,7 @@ function findRateByGroup(originFac, destCity, destState, destZip, group){
 let best = null;
 let bestScore = -1;
 let bestPriority = 999;
+let bestPrice = Infinity;
 for(const r of RATES){
 if(r.mode !== "RAIL") continue;
 if(railEquipGroup(r.equip) !== group) continue;
@@ -887,12 +893,16 @@ priority = getBoxcarPriority(r.equip);
 } else if(group === "CENTERBEAM"){
 priority = getCenterbeamPriority(r.equip);
 }
+const isMI = (r.uom||"").toString().toUpperCase() === "MI";
+const price = isMI ? (Number(r.rate)||Infinity) : (Number(r.flat)||Infinity);
 if(
 scored > bestScore ||
-(scored === bestScore && priority < bestPriority)
+(scored === bestScore && priority < bestPriority) ||
+(scored === bestScore && priority === bestPriority && price < bestPrice)
 ){
 bestScore = scored;
 bestPriority = priority;
+bestPrice = price;
 best = { ...r, score: scored };
 }
 }
@@ -917,9 +927,18 @@ let destScore=0;
 if(r.destLoc){
 const city = nc(r.destLoc);
 const st = (r.destLoc.split(",")[1]||"").trim().toUpperCase();
-if(destCity && city===destCity) destScore=3;
-else if(destState && st===destState) destScore=2;
-else return -1;
+// City+state both match = exact (3). City matches but wrong state = REJECT.
+// State-only matches when user only provided state (no city) = partial (2).
+if(destCity && city===destCity){
+if(destState && st && st !== destState) return -1;  // wrong state, reject
+destScore=3;
+}else if(destCity){
+return -1;  // city was specified but didn't match
+}else if(destState && st===destState){
+destScore=2;
+}else{
+return -1;
+}
 }else if(r.destPostal){
 if(destZip){
 const dz = destZip.replace(/[^0-9A-Z]/g,"");
