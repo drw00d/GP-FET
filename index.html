@@ -572,73 +572,177 @@ document.getElementById("originZip").value = ORIGIN_ZIPS[val] || "";
 }
 
 let _destAutocomplete = null;
+let _pacSessionToken = null;
+let _destActiveIndex = -1;
+
+function _railSheetMatches(q){
+  const Q = (q||"").trim().toUpperCase();
+  if(Q.length < 2) return [];
+  // Prefix matches first, then contains-matches, deduped by CITY,STATE.
+  const seen = new Set();
+  const pref = [], cont = [];
+  for(const c of RAIL_DEST_CITIES){
+    const city = (c[0]||"").toUpperCase();
+    const key = city + "," + (c[1]||"");
+    if(seen.has(key)) continue;
+    if(city.startsWith(Q)){ seen.add(key); pref.push(c); }
+    else if(city.includes(Q)){ cont.push(c); }
+  }
+  for(const c of cont){
+    const key = (c[0]||"").toUpperCase() + "," + (c[1]||"");
+    if(!seen.has(key)){ seen.add(key); pref.push(c); }
+  }
+  return pref.slice(0, 8);
+}
+
+async function _googleSuggestions(q){
+  try{
+    if(!window.google?.maps?.places?.AutocompleteSuggestion) return [];
+    if(!_pacSessionToken) _pacSessionToken = new google.maps.places.AutocompleteSessionToken();
+    const req = {
+      input: q,
+      includedPrimaryTypes: ["locality","administrative_area_level_3","postal_town"],
+      includedRegionCodes: ["us"],
+      sessionToken: _pacSessionToken
+    };
+    const { suggestions } = await google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
+    return (suggestions||[]).map(s=>s.placePrediction).filter(Boolean);
+  }catch(err){ console.warn("Google suggestions failed:", err); return []; }
+}
+
+function hideDestPicker(){
+  document.getElementById("destPicker")?.remove();
+  _destActiveIndex = -1;
+}
+
+function _renderDestPicker(items){
+  hideDestPicker();
+  const input = document.getElementById("destCity");
+  if(!input || !items.length) return;
+  const picker = document.createElement("div");
+  picker.id = "destPicker";
+  picker.className = "zip-picker";
+  picker.innerHTML = items.map((it,i)=>{
+    if(it.kind === "sheet"){
+      return `<div class="zip-item" data-i="${i}"><span style="display:inline-flex;align-items:center;gap:6px;"><strong>${it.city}</strong>, ${it.state} <span style="color:var(--text-muted);font-size:11px;">(rail destination)</span></span></div>`;
+    }
+    return `<div class="zip-item" data-i="${i}">📍 ${it.label}</div>`;
+  }).join("");
+  picker.addEventListener("mousedown",(e)=>{ // mousedown so it fires before input blur
+    const row = e.target.closest(".zip-item");
+    if(!row) return;
+    e.preventDefault();
+    _selectDestItem(items[Number(row.getAttribute("data-i"))]);
+  });
+  document.body.appendChild(picker);
+  const r = input.getBoundingClientRect();
+  const pad = 10;
+  const spaceBelow = window.innerHeight - r.bottom - pad;
+  const spaceAbove = r.top - pad;
+  const openDown = spaceBelow >= 240 || spaceBelow >= spaceAbove;
+  const maxH = Math.max(160, Math.min(420, openDown ? spaceBelow : spaceAbove));
+  picker.style.maxHeight = maxH + "px";
+  picker.style.width = Math.max(r.width, 280) + "px";
+  let left = Math.max(pad, Math.min(r.left, window.innerWidth - Math.max(r.width,280) - pad));
+  picker.style.left = left + "px";
+  picker.style.top = openDown ? Math.min(r.bottom + 6, window.innerHeight - maxH - pad) + "px"
+                              : Math.max(pad, r.top - maxH - 6) + "px";
+}
+
+async function _selectDestItem(item){
+  const cityEl = document.getElementById("destCity");
+  const stateEl = document.getElementById("destState");
+  hideDestPicker();
+  // Reset stale ZIP suggestions before loading new ones.
+  const _zipEl = document.getElementById("destZip");
+  if(_zipEl) _zipEl.value = "";
+  LAST_DEST_ZIPS = [];
+  hideZipPicker();
+
+  if(item.kind === "sheet"){
+    // Rail-sheet city: fill directly from our own data, no Google call needed.
+    cityEl.value = item.city;
+    if(stateEl) stateEl.value = item.state;
+    LAST_DEST_CITY = item.city;
+    LAST_DEST_STATE = item.state;
+    return;
+  }
+
+  // Google prediction: fetch place details, then derive ZIP suggestions.
+  try{
+    const place = item.prediction.toPlace();
+    await place.fetchFields({ fields:["addressComponents","location","displayName"] });
+    _pacSessionToken = null; // end session after a detail fetch
+    const comps = place.addressComponents || [];
+    const getComp=(type,short=false)=>{
+      const c = comps.find(c=>c.types.includes(type));
+      if(!c) return "";
+      return short ? (c.shortText || c.short_name || "") : (c.longText || c.long_name || "");
+    };
+    const city = (getComp("locality") || (place.displayName||"")).toUpperCase();
+    const state = (getComp("administrative_area_level_1", true) || "").toUpperCase();
+    cityEl.value = city;
+    if(state) stateEl.value = state;
+    LAST_DEST_CITY = city;
+    LAST_DEST_STATE = state;
+
+    const loc = place.location;
+    const _latNum = (loc && typeof loc.lat === "function") ? loc.lat() : (loc ? loc.lat : null);
+    const _lngNum = (loc && typeof loc.lng === "function") ? loc.lng() : (loc ? loc.lng : null);
+    const compatPlace = {
+      geometry: { location: { lat: ()=>_latNum, lng: ()=>_lngNum } },
+      address_components: comps.map(c=>({ long_name:c.longText, short_name:c.shortText, types:c.types })),
+      name: place.displayName
+    };
+    const zips = await suggestZipsForCity(compatPlace, city, state);
+    LAST_DEST_ZIPS = zips;
+    if(zips && zips.length) showZipPicker(zips, city, state);
+  }catch(err){ console.warn("Place selection failed:", err); }
+}
+
+async function _onDestInput(){
+  const cityEl = document.getElementById("destCity");
+  const q = (cityEl?.value || "").trim();
+  if(q.length < 2){ hideDestPicker(); return; }
+  const items = [];
+  // Rail mode: prioritise destinations from the GP Rail / Gen 2 sheet.
+  if(SELECTED_MODE === "RAIL"){
+    for(const c of _railSheetMatches(q)){
+      items.push({ kind:"sheet", city:c[0], state:c[1] });
+    }
+  }
+  // Always offer Google as fallback for cities not on the sheet (and for Truck mode).
+  const preds = await _googleSuggestions(q);
+  const have = new Set(items.map(it=>(it.city+","+it.state)));
+  for(const p of preds){
+    const label = p.text?.text || p.mainText?.text || "";
+    items.push({ kind:"google", label, prediction:p });
+  }
+  // Only render if the input hasn't changed since we started.
+  if((cityEl.value||"").trim() !== q) return;
+  _renderDestPicker(items.slice(0, 12));
+}
+
 function initDestinationAutocomplete(){
-if(!window.google?.maps?.places?.PlaceAutocompleteElement) return;
-const cityEl = document.getElementById("destCity");
-const stateEl = document.getElementById("destState");
-if(!cityEl || !stateEl) return;
-if(_destAutocomplete) return;
+  const cityEl = document.getElementById("destCity");
+  const stateEl = document.getElementById("destState");
+  if(!cityEl || !stateEl) return;
+  if(_destAutocomplete) return;
+  _destAutocomplete = true;
+  // Keep the native input visible; we drive suggestions ourselves so we can mix
+  // the rail sheet data with Google Places (sheet first, Google fallback).
+  cityEl.style.display = "";
+  cityEl.addEventListener("input", _onDestInput);
+  cityEl.addEventListener("focus", _onDestInput);
+  cityEl.addEventListener("keydown",(e)=>{ if(e.key === "Escape") hideDestPicker(); });
+  document.addEventListener("click",(e)=>{
+    if(!e.target.closest("#destPicker") && !e.target.closest("#destCity")) hideDestPicker();
+  },{capture:true});
+  window.addEventListener("scroll",()=>hideDestPicker(),{passive:true});
+  window.addEventListener("resize",()=>hideDestPicker(),{passive:true});
+}
 
-// New Places UI: PlaceAutocompleteElement replaces the legacy Autocomplete widget,
-// which Google disabled for keys created after March 1, 2025. We mount the new
-// element next to the original text input and keep that input in sync so all the
-// existing downstream logic (submitQuote, rail picker, clearForm) keeps working.
-const pac = new google.maps.places.PlaceAutocompleteElement({
-includedPrimaryTypes:["locality","administrative_area_level_3","postal_town"],
-includedRegionCodes:["us"]
-});
-pac.id = "destCityPac";
-// Match the look/width of the original field.
-pac.style.width = "100%";
-_destAutocomplete = pac;
-
-// Hide the legacy text input but keep it in the DOM as the value holder.
-cityEl.style.display = "none";
-cityEl.parentNode.appendChild(pac);
-
-// Mirror manual typing in the new element back into the rail-city fallback flow.
-pac.addEventListener("input", ()=>{ if(typeof onDestCityInput === "function") onDestCityInput(); });
-
-pac.addEventListener("gmp-select", async ({placePrediction})=>{
-try{
-const place = placePrediction.toPlace();
-await place.fetchFields({ fields:["addressComponents","location","displayName"] });
-const comps = place.addressComponents || [];
-const getComp=(type,short=false)=>{
-const c = comps.find(c=>c.types.includes(type));
-if(!c) return "";
-return short ? (c.shortText || c.short_name || "") : (c.longText || c.long_name || "");
-};
-const city = (getComp("locality") || (place.displayName||"")).toUpperCase();
-const state = (getComp("administrative_area_level_1", true) || "").toUpperCase();
-cityEl.value = city;
-if(state) stateEl.value = state;
-// Reset any stale ZIP suggestions from a previously selected city before loading new ones.
-const _zipEl = document.getElementById("destZip");
-if(_zipEl) _zipEl.value = "";
-LAST_DEST_ZIPS = [];
-hideZipPicker();
-
-// Build a lightweight object compatible with suggestZipsForCity (expects geometry.location.lat()/lng()).
-const loc = place.location;
-// place.location is a google.maps.LatLng (lat()/lng() are functions in this API
-// version) but can also be a plain {lat,lng} literal. Normalize to numbers so the
-// Geocoder below receives valid LatLngLiteral points.
-const _latNum = (loc && typeof loc.lat === "function") ? loc.lat() : (loc ? loc.lat : null);
-const _lngNum = (loc && typeof loc.lng === "function") ? loc.lng() : (loc ? loc.lng : null);
-const compatPlace = {
-geometry: { location: { lat: ()=>_latNum, lng: ()=>_lngNum } },
-address_components: comps.map(c=>({ long_name:c.longText, short_name:c.shortText, types:c.types })),
-name: place.displayName
-};
-const zips = await suggestZipsForCity(compatPlace, city, state);
-LAST_DEST_CITY = city;
-LAST_DEST_STATE = state;
-LAST_DEST_ZIPS = zips;
-showZipPicker(zips, city, state);
-}catch(err){ console.warn("Place selection failed:", err); }
-});
-}async function suggestZipsForCity(place, city, state){
+async function suggestZipsForCity(place, city, state){
 if(!place?.geometry?.location) return [];
 const key = _zipCacheKey(city, state);
 if(city && state && zipSuggestCache.has(key)) return zipSuggestCache.get(key);
@@ -722,11 +826,9 @@ picker.style.top = openDown
 }
 
 function onDestCityInput(){
-if(SELECTED_MODE !== "RAIL") { hideRailCityPicker(); return; }
-const q = (document.getElementById("destCity").value || "").trim().toUpperCase();
-if(!q || q.length < 2){ hideRailCityPicker(); return; }
-const matches = RAIL_DEST_CITIES.filter(c => c[0].startsWith(q));
-showRailCityPicker(matches);
+  // Superseded by _onDestInput (handles rail-sheet + Google together). Kept as a
+  // no-op so legacy listeners attached in buildUI don't open a competing dropdown.
+  return;
 }
 
 function showZipPicker(zips, city, state){
