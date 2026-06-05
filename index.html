@@ -578,7 +578,6 @@ let _destActiveIndex = -1;
 function _railSheetMatches(q){
   const Q = (q||"").trim().toUpperCase();
   if(Q.length < 2) return [];
-  // Prefix matches first, then contains-matches, deduped by CITY,STATE.
   const seen = new Set();
   const pref = [], cont = [];
   for(const c of RAIL_DEST_CITIES){
@@ -628,7 +627,7 @@ function _renderDestPicker(items){
     }
     return `<div class="zip-item" data-i="${i}">📍 ${it.label}</div>`;
   }).join("");
-  picker.addEventListener("mousedown",(e)=>{ // mousedown so it fires before input blur
+  picker.addEventListener("mousedown",(e)=>{
     const row = e.target.closest(".zip-item");
     if(!row) return;
     e.preventDefault();
@@ -653,14 +652,12 @@ async function _selectDestItem(item){
   const cityEl = document.getElementById("destCity");
   const stateEl = document.getElementById("destState");
   hideDestPicker();
-  // Reset stale ZIP suggestions before loading new ones.
   const _zipEl = document.getElementById("destZip");
   if(_zipEl) _zipEl.value = "";
   LAST_DEST_ZIPS = [];
   hideZipPicker();
 
   if(item.kind === "sheet"){
-    // Rail-sheet city: fill directly from our own data, no Google call needed.
     cityEl.value = item.city;
     if(stateEl) stateEl.value = item.state;
     LAST_DEST_CITY = item.city;
@@ -668,11 +665,10 @@ async function _selectDestItem(item){
     return;
   }
 
-  // Google prediction: fetch place details, then derive ZIP suggestions.
   try{
     const place = item.prediction.toPlace();
     await place.fetchFields({ fields:["addressComponents","location","displayName"] });
-    _pacSessionToken = null; // end session after a detail fetch
+    _pacSessionToken = null;
     const comps = place.addressComponents || [];
     const getComp=(type,short=false)=>{
       const c = comps.find(c=>c.types.includes(type));
@@ -705,20 +701,16 @@ async function _onDestInput(){
   const q = (cityEl?.value || "").trim();
   if(q.length < 2){ hideDestPicker(); return; }
   const items = [];
-  // Rail mode: prioritise destinations from the GP Rail / Gen 2 sheet.
   if(SELECTED_MODE === "RAIL"){
     for(const c of _railSheetMatches(q)){
       items.push({ kind:"sheet", city:c[0], state:c[1] });
     }
   }
-  // Always offer Google as fallback for cities not on the sheet (and for Truck mode).
   const preds = await _googleSuggestions(q);
-  const have = new Set(items.map(it=>(it.city+","+it.state)));
   for(const p of preds){
     const label = p.text?.text || p.mainText?.text || "";
     items.push({ kind:"google", label, prediction:p });
   }
-  // Only render if the input hasn't changed since we started.
   if((cityEl.value||"").trim() !== q) return;
   _renderDestPicker(items.slice(0, 12));
 }
@@ -729,8 +721,6 @@ function initDestinationAutocomplete(){
   if(!cityEl || !stateEl) return;
   if(_destAutocomplete) return;
   _destAutocomplete = true;
-  // Keep the native input visible; we drive suggestions ourselves so we can mix
-  // the rail sheet data with Google Places (sheet first, Google fallback).
   cityEl.style.display = "";
   cityEl.addEventListener("input", _onDestInput);
   cityEl.addEventListener("focus", _onDestInput);
@@ -826,8 +816,7 @@ picker.style.top = openDown
 }
 
 function onDestCityInput(){
-  // Superseded by _onDestInput (handles rail-sheet + Google together). Kept as a
-  // no-op so legacy listeners attached in buildUI don't open a competing dropdown.
+  // Superseded by _onDestInput (rail-sheet + Google). No-op to avoid double dropdowns.
   return;
 }
 
