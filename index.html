@@ -613,6 +613,11 @@ const city = (getComp("locality") || (place.displayName||"")).toUpperCase();
 const state = (getComp("administrative_area_level_1", true) || "").toUpperCase();
 cityEl.value = city;
 if(state) stateEl.value = state;
+// Reset any stale ZIP suggestions from a previously selected city before loading new ones.
+const _zipEl = document.getElementById("destZip");
+if(_zipEl) _zipEl.value = "";
+LAST_DEST_ZIPS = [];
+hideZipPicker();
 
 // Build a lightweight object compatible with suggestZipsForCity (expects geometry.location.lat()/lng()).
 const loc = place.location;
