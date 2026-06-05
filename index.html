@@ -315,17 +315,16 @@ loadMilesCache();
 
 let _gmapsPromise = null;
 function loadGoogleMapsJS(){
-if(window.google?.maps?.places) return Promise.resolve();
+if(window.google?.maps?.places?.PlaceAutocompleteElement) return Promise.resolve();
 if(_gmapsPromise) return _gmapsPromise;
 _gmapsPromise = new Promise((resolve,reject)=>{
 if(!GMAPS_KEY) return resolve();
-window.__initGMaps = ()=>resolve();
-const s = document.createElement("script");
-s.async = true;
-s.defer = true;
-s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&libraries=places&callback=__initGMaps`;
-s.onerror = ()=>reject(new Error("Google Maps failed to load"));
-document.head.appendChild(s);
+(g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({key:GMAPS_KEY,v:"weekly"});
+Promise.all([
+google.maps.importLibrary("places"),
+google.maps.importLibrary("geocoding"),
+google.maps.importLibrary("routes")
+]).then(()=>resolve()).catch(err=>reject(err));
 });
 return _gmapsPromise;
 }
@@ -574,34 +573,62 @@ document.getElementById("originZip").value = ORIGIN_ZIPS[val] || "";
 
 let _destAutocomplete = null;
 function initDestinationAutocomplete(){
-if(!window.google?.maps?.places) return;
+if(!window.google?.maps?.places?.PlaceAutocompleteElement) return;
 const cityEl = document.getElementById("destCity");
 const stateEl = document.getElementById("destState");
 if(!cityEl || !stateEl) return;
 if(_destAutocomplete) return;
-_destAutocomplete = new google.maps.places.Autocomplete(cityEl,{
-types:["(cities)"],
-componentRestrictions:{country:["us"]},
-fields:["address_components","geometry","name"]
+
+// New Places UI: PlaceAutocompleteElement replaces the legacy Autocomplete widget,
+// which Google disabled for keys created after March 1, 2025. We mount the new
+// element next to the original text input and keep that input in sync so all the
+// existing downstream logic (submitQuote, rail picker, clearForm) keeps working.
+const pac = new google.maps.places.PlaceAutocompleteElement({
+includedPrimaryTypes:["locality","administrative_area_level_3","postal_town"],
+includedRegionCodes:["us"]
 });
-_destAutocomplete.addListener("place_changed", async ()=>{
-const place = _destAutocomplete.getPlace();
-if(!place?.address_components) return;
-const getComp=(type,short=false)=>
-place.address_components.find(c=>c.types.includes(type))?.[short?"short_name":"long_name"] || "";
-const city = (getComp("locality") || place.name || "").toUpperCase();
+pac.id = "destCityPac";
+// Match the look/width of the original field.
+pac.style.width = "100%";
+_destAutocomplete = pac;
+
+// Hide the legacy text input but keep it in the DOM as the value holder.
+cityEl.style.display = "none";
+cityEl.parentNode.appendChild(pac);
+
+// Mirror manual typing in the new element back into the rail-city fallback flow.
+pac.addEventListener("input", ()=>{ if(typeof onDestCityInput === "function") onDestCityInput(); });
+
+pac.addEventListener("gmp-select", async ({placePrediction})=>{
+try{
+const place = placePrediction.toPlace();
+await place.fetchFields({ fields:["addressComponents","location","displayName"] });
+const comps = place.addressComponents || [];
+const getComp=(type,short=false)=>{
+const c = comps.find(c=>c.types.includes(type));
+if(!c) return "";
+return short ? (c.shortText || c.short_name || "") : (c.longText || c.long_name || "");
+};
+const city = (getComp("locality") || (place.displayName||"")).toUpperCase();
 const state = (getComp("administrative_area_level_1", true) || "").toUpperCase();
 cityEl.value = city;
 if(state) stateEl.value = state;
-const zips = await suggestZipsForCity(place, city, state);
+
+// Build a lightweight object compatible with suggestZipsForCity (expects geometry.location.lat()/lng()).
+const loc = place.location;
+const compatPlace = {
+geometry: { location: { lat: ()=>loc.lat, lng: ()=>loc.lng } },
+address_components: comps.map(c=>({ long_name:c.longText, short_name:c.shortText, types:c.types })),
+name: place.displayName
+};
+const zips = await suggestZipsForCity(compatPlace, city, state);
 LAST_DEST_CITY = city;
 LAST_DEST_STATE = state;
 LAST_DEST_ZIPS = zips;
 showZipPicker(zips, city, state);
+}catch(err){ console.warn("Place selection failed:", err); }
 });
-}
-
-async function suggestZipsForCity(place, city, state){
+}async function suggestZipsForCity(place, city, state){
 if(!place?.geometry?.location) return [];
 const key = _zipCacheKey(city, state);
 if(city && state && zipSuggestCache.has(key)) return zipSuggestCache.get(key);
