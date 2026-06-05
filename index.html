@@ -921,19 +921,26 @@ return miles;
 async function getMileageGoogle(originStr, destStr){
 if(!GMAPS_KEY) return null;
 try{
-await loadGoogleMapsJS();
-if(!window.google?.maps?.DistanceMatrixService) return null;
-const service = new google.maps.DistanceMatrixService();
-const response = await new Promise((resolve,reject)=>{
-service.getDistanceMatrix({
-origins:[originStr], destinations:[destStr],
-travelMode:google.maps.TravelMode.DRIVING,
-unitSystem:google.maps.UnitSystem.IMPERIAL
-}, (res,status)=> status==="OK" ? resolve(res) : reject(new Error(status)));
+const url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix?key=" + encodeURIComponent(GMAPS_KEY);
+const reqBody = {
+origins: [{ waypoint: { address: originStr } }],
+destinations: [{ waypoint: { address: destStr } }],
+travelMode: "DRIVE",
+routingPreference: "TRAFFIC_UNAWARE"
+};
+const resp = await fetch(url, {
+method: "POST",
+headers: {
+"Content-Type": "application/json",
+"X-Goog-FieldMask": "originIndex,destinationIndex,distanceMeters,condition"
+},
+body: JSON.stringify(reqBody)
 });
-const el = response?.rows?.[0]?.elements?.[0];
-if(!el || el.status!=="OK") return null;
-return Math.round(el.distance.value/1609.34);
+if(!resp.ok) return null;
+const data = await resp.json();
+const row = Array.isArray(data) ? data.find(r => r && r.condition === "ROUTE_EXISTS" && typeof r.distanceMeters === "number") : null;
+if(!row) return null;
+return Math.round(row.distanceMeters / 1609.34);
 }catch(_){
 return null;
 }
