@@ -621,8 +621,13 @@ hideZipPicker();
 
 // Build a lightweight object compatible with suggestZipsForCity (expects geometry.location.lat()/lng()).
 const loc = place.location;
+// place.location is a google.maps.LatLng (lat()/lng() are functions in this API
+// version) but can also be a plain {lat,lng} literal. Normalize to numbers so the
+// Geocoder below receives valid LatLngLiteral points.
+const _latNum = (loc && typeof loc.lat === "function") ? loc.lat() : (loc ? loc.lat : null);
+const _lngNum = (loc && typeof loc.lng === "function") ? loc.lng() : (loc ? loc.lng : null);
 const compatPlace = {
-geometry: { location: { lat: ()=>loc.lat, lng: ()=>loc.lng } },
+geometry: { location: { lat: ()=>_latNum, lng: ()=>_lngNum } },
 address_components: comps.map(c=>({ long_name:c.longText, short_name:c.shortText, types:c.types })),
 name: place.displayName
 };
