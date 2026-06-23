@@ -243,7 +243,7 @@ let BTRAIN_DEST_CITIES = [];  // B-Train (Intra-Canada) destinations for autocom
 let currentMatch = null;
 let currentCompareMatches = null;
 let SELECTED_MODE = "TRUCK";
-let SELECTED_RAIL_EQ = "ALL";
+let SELECTED_RAIL_EQ = "COMPARE";  // rail always compares Boxcar vs Centerbeam
 let SELECTED_TRUCK_EQ = "STANDARD";  // STANDARD (dry van etc.) | BTRAIN
 let BTRAIN_ORIGINS = new Set();  // truck origins that actually have B-Train rates (Englehart / Earlton)
 
@@ -462,9 +462,6 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <div class="field" id="railEquipWrap" style="display:${SELECTED_MODE==="RAIL" ? "block":"none"}; margin-bottom:16px;">
 <label>Rail Equipment</label>
 <select id="railEquip" onchange="onRailEquipChange()">
-<option value="ALL">All</option>
-<option value="BOXCAR">Boxcar</option>
-<option value="CENTERBEAM">Centerbeam</option>
 <option value="COMPARE">Compare Both</option>
 </select>
 </div>
@@ -522,7 +519,7 @@ initDestinationAutocomplete();
 
 function setMode(mode){
 SELECTED_MODE = mode;
-if(mode !== "RAIL") SELECTED_RAIL_EQ = "ALL";
+SELECTED_RAIL_EQ = (mode === "RAIL") ? "COMPARE" : "ALL";
 if(mode !== "TRUCK") SELECTED_TRUCK_EQ = "STANDARD";
 document.getElementById("modeTruck")?.classList.toggle("active", mode==="TRUCK");
 document.getElementById("modeRail")?.classList.toggle("active", mode==="RAIL");
