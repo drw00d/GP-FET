@@ -245,6 +245,7 @@ let currentCompareMatches = null;
 let SELECTED_MODE = "TRUCK";
 let SELECTED_RAIL_EQ = "ALL";
 let SELECTED_TRUCK_EQ = "STANDARD";  // STANDARD (dry van etc.) | BTRAIN
+let BTRAIN_ORIGINS = new Set();  // truck origins that actually have B-Train rates (Englehart / Earlton)
 
 const RAIL_ORIGIN_LABELS = {
 "ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
@@ -377,6 +378,7 @@ RATES = (data.rates || []).map(normRow).filter(Boolean);
 ORIGIN_ZIPS = data.origin_zips || {};
 RAIL_DEST_CITIES = data.rail_dest_cities || [];
 BTRAIN_DEST_CITIES = data.btrain_dest_cities || [];
+BTRAIN_ORIGINS = new Set(RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip) && r.origLoc).map(r=>r.origLoc));
 buildUI();
 const btrainCount = RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip)).length;
 const truckCount = RATES.filter(r=>r.mode==="TRUCK").length - btrainCount;
@@ -466,7 +468,7 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <option value="COMPARE">Compare Both</option>
 </select>
 </div>
-<div class="field" id="truckEquipWrap" style="display:${SELECTED_MODE==="TRUCK" ? "block":"none"}; margin-bottom:16px;">
+<div class="field" id="truckEquipWrap" style="display:none; margin-bottom:16px;">
 <label>Truck Equipment</label>
 <select id="truckEquip" onchange="onTruckEquipChange()">
 <option value="STANDARD">Standard</option>
@@ -497,6 +499,7 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 </div>
 </div>`;
 refreshOriginOptions();
+rebuildTruckEquipOptions();
 const zipInput = document.getElementById("destZip");
 zipInput?.addEventListener("focus", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
 zipInput?.addEventListener("click", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
@@ -525,11 +528,8 @@ document.getElementById("modeTruck")?.classList.toggle("active", mode==="TRUCK")
 document.getElementById("modeRail")?.classList.toggle("active", mode==="RAIL");
 const wrap = document.getElementById("railEquipWrap");
 if(wrap) wrap.style.display = (mode==="RAIL") ? "block" : "none";
-const twrap = document.getElementById("truckEquipWrap");
-if(twrap) twrap.style.display = (mode==="TRUCK") ? "block" : "none";
-const tsel = document.getElementById("truckEquip");
-if(tsel) tsel.value = SELECTED_TRUCK_EQ;
 refreshOriginOptions();
+rebuildTruckEquipOptions();   // shows B-Train only for B-Train origins, in Truck mode
 clearResultsOnly();
 }
 
@@ -540,8 +540,25 @@ clearResultsOnly();
 
 function onTruckEquipChange(){
 SELECTED_TRUCK_EQ = document.getElementById("truckEquip")?.value || "STANDARD";
-refreshOriginOptions();   // B-Train has its own origins (Englehart / Earlton)
 clearResultsOnly();
+}
+
+// The Truck Equipment chooser only surfaces B-Train when the selected origin
+// actually has B-Train rates (Englehart / Earlton). For any other origin it is
+// hidden and the equipment falls back to Standard.
+function rebuildTruckEquipOptions(){
+const sel = document.getElementById("truckEquip");
+const twrap = document.getElementById("truckEquipWrap");
+if(!sel || !twrap) return;
+const origin = document.getElementById("originFacility")?.value || "";
+const allowBTrain = (SELECTED_MODE === "TRUCK") && BTRAIN_ORIGINS.has(origin);
+if(!allowBTrain && SELECTED_TRUCK_EQ === "BTRAIN"){
+SELECTED_TRUCK_EQ = "STANDARD";
+clearResultsOnly();
+}
+twrap.style.display = allowBTrain ? "block" : "none";
+sel.innerHTML = `<option value="STANDARD">Standard</option><option value="BTRAIN">B-Train (Intra-Canada)</option>`;
+sel.value = SELECTED_TRUCK_EQ;
 }
 
 function clearResultsOnly(){
@@ -575,7 +592,6 @@ function getOriginsForMode(mode){
 const set = new Set();
 for(const r of RATES){
 if(r.mode !== mode) continue;
-if(mode === "TRUCK" && !truckEquipMatches(r)) continue;
 if(r.origLoc) set.add(r.origLoc);
 }
 return Array.from(set).sort();
@@ -594,12 +610,14 @@ if(!val){
 document.getElementById("originCity").value="";
 document.getElementById("originState").value="";
 document.getElementById("originZip").value="";
+rebuildTruckEquipOptions();
 return;
 }
 const parts = val.split(",");
 document.getElementById("originCity").value = (parts[0]||"").trim();
 document.getElementById("originState").value = (parts[1]||"").trim();
 document.getElementById("originZip").value = ORIGIN_ZIPS[val] || "";
+rebuildTruckEquipOptions();
 }
 
 let _destAutocomplete = null;
