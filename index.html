@@ -239,10 +239,12 @@ const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg";
 let RATES = [];
 let ORIGIN_ZIPS = {};
 let RAIL_DEST_CITIES = [];  // [[city, state, country], ...] from rates.json for autocomplete
+let BTRAIN_DEST_CITIES = [];  // B-Train (Intra-Canada) destinations for autocomplete fallback
 let currentMatch = null;
 let currentCompareMatches = null;
 let SELECTED_MODE = "TRUCK";
 let SELECTED_RAIL_EQ = "ALL";
+let SELECTED_TRUCK_EQ = "STANDARD";  // STANDARD (dry van etc.) | BTRAIN
 
 const RAIL_ORIGIN_LABELS = {
 "ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
@@ -374,13 +376,16 @@ const data = await res.json();
 RATES = (data.rates || []).map(normRow).filter(Boolean);
 ORIGIN_ZIPS = data.origin_zips || {};
 RAIL_DEST_CITIES = data.rail_dest_cities || [];
+BTRAIN_DEST_CITIES = data.btrain_dest_cities || [];
 buildUI();
-const truckCount = RATES.filter(r=>r.mode==="TRUCK").length;
+const btrainCount = RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip)).length;
+const truckCount = RATES.filter(r=>r.mode==="TRUCK").length - btrainCount;
 const railCount = RATES.filter(r=>r.mode==="RAIL").length;
 document.getElementById("dataStatus").textContent =
 RATES.length.toLocaleString()+" rates loaded (" +
 truckCount.toLocaleString() + " truck, " +
-railCount.toLocaleString() + " rail)";
+railCount.toLocaleString() + " rail, " +
+btrainCount.toLocaleString() + " B-Train)";
 loadGoogleMapsJS().then(()=>initDestinationAutocomplete()).catch(()=>{});
 }catch(e){
 document.getElementById("appContainer").innerHTML =
@@ -461,6 +466,13 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <option value="COMPARE">Compare Both</option>
 </select>
 </div>
+<div class="field" id="truckEquipWrap" style="display:${SELECTED_MODE==="TRUCK" ? "block":"none"}; margin-bottom:16px;">
+<label>Truck Equipment</label>
+<select id="truckEquip" onchange="onTruckEquipChange()">
+<option value="STANDARD">Standard</option>
+<option value="BTRAIN">B-Train (Intra-Canada)</option>
+</select>
+</div>
 <div class="btn-row">
 <button class="btn btn-primary" onclick="submitQuote()">Submit</button>
 <button class="btn btn-secondary" onclick="clearForm()">Clear</button>
@@ -508,16 +520,27 @@ initDestinationAutocomplete();
 function setMode(mode){
 SELECTED_MODE = mode;
 if(mode !== "RAIL") SELECTED_RAIL_EQ = "ALL";
+if(mode !== "TRUCK") SELECTED_TRUCK_EQ = "STANDARD";
 document.getElementById("modeTruck")?.classList.toggle("active", mode==="TRUCK");
 document.getElementById("modeRail")?.classList.toggle("active", mode==="RAIL");
 const wrap = document.getElementById("railEquipWrap");
 if(wrap) wrap.style.display = (mode==="RAIL") ? "block" : "none";
+const twrap = document.getElementById("truckEquipWrap");
+if(twrap) twrap.style.display = (mode==="TRUCK") ? "block" : "none";
+const tsel = document.getElementById("truckEquip");
+if(tsel) tsel.value = SELECTED_TRUCK_EQ;
 refreshOriginOptions();
 clearResultsOnly();
 }
 
 function onRailEquipChange(){
 SELECTED_RAIL_EQ = document.getElementById("railEquip")?.value || "ALL";
+clearResultsOnly();
+}
+
+function onTruckEquipChange(){
+SELECTED_TRUCK_EQ = document.getElementById("truckEquip")?.value || "STANDARD";
+refreshOriginOptions();   // B-Train has its own origins (Englehart / Earlton)
 clearResultsOnly();
 }
 
@@ -552,9 +575,17 @@ function getOriginsForMode(mode){
 const set = new Set();
 for(const r of RATES){
 if(r.mode !== mode) continue;
+if(mode === "TRUCK" && !truckEquipMatches(r)) continue;
 if(r.origLoc) set.add(r.origLoc);
 }
 return Array.from(set).sort();
+}
+
+// True when a truck row belongs to the currently-selected truck equipment.
+// STANDARD excludes B-Train; BTRAIN includes only B-Train.
+function truckEquipMatches(r){
+const bt = isBTrainEquip(r.equip);
+return SELECTED_TRUCK_EQ === "BTRAIN" ? bt : !bt;
 }
 
 function onOriginChange(){
@@ -575,12 +606,12 @@ let _destAutocomplete = null;
 let _pacSessionToken = null;
 let _destActiveIndex = -1;
 
-function _railSheetMatches(q){
+function _sheetCityMatches(q, list){
   const Q = (q||"").trim().toUpperCase();
   if(Q.length < 2) return [];
   const seen = new Set();
   const pref = [], cont = [];
-  for(const c of RAIL_DEST_CITIES){
+  for(const c of (list||[])){
     const city = (c[0]||"").toUpperCase();
     const key = city + "," + (c[1]||"");
     if(seen.has(key)) continue;
@@ -592,6 +623,10 @@ function _railSheetMatches(q){
     if(!seen.has(key)){ seen.add(key); pref.push(c); }
   }
   return pref.slice(0, 8);
+}
+
+function _railSheetMatches(q){
+  return _sheetCityMatches(q, RAIL_DEST_CITIES);
 }
 
 async function _googleSuggestions(q){
@@ -623,7 +658,7 @@ function _renderDestPicker(items){
   picker.className = "zip-picker";
   picker.innerHTML = items.map((it,i)=>{
     if(it.kind === "sheet"){
-      return `<div class="zip-item" data-i="${i}"><span style="display:inline-flex;align-items:center;gap:6px;"><strong>${it.city}</strong>, ${it.state} <span style="color:var(--text-muted);font-size:11px;">(rail destination)</span></span></div>`;
+      return `<div class="zip-item" data-i="${i}"><span style="display:inline-flex;align-items:center;gap:6px;"><strong>${it.city}</strong>, ${it.state} <span style="color:var(--text-muted);font-size:11px;">(${it.note || "rail destination"})</span></span></div>`;
     }
     return `<div class="zip-item" data-i="${i}">📍 ${it.label}</div>`;
   }).join("");
@@ -704,6 +739,10 @@ async function _onDestInput(){
   if(SELECTED_MODE === "RAIL"){
     for(const c of _railSheetMatches(q)){
       items.push({ kind:"sheet", city:c[0], state:c[1] });
+    }
+  } else if(SELECTED_MODE === "TRUCK" && SELECTED_TRUCK_EQ === "BTRAIN"){
+    for(const c of _sheetCityMatches(q, BTRAIN_DEST_CITIES)){
+      items.push({ kind:"sheet", city:c[0], state:c[1], note:"B-Train destination" });
     }
   }
   const preds = await _googleSuggestions(q);
@@ -954,6 +993,11 @@ function nc(str){ return str ? str.split(",")[0].trim().toUpperCase() : ""; }
 //   B-prefix (B50/B52/B60/B63), H63, HF52 → BOXCAR (all describe boxcars)
 //   C73/C74/H73/H74 → CENTERBEAM (not-bulkhead flat cars)
 //   F60/F62 → CENTERBEAM (bulkhead flatcars)
+// B-Train truck rates use equipment codes ending in "BT" (e.g. 58FT000BT).
+function isBTrainEquip(code){
+return /BT$/.test((code || "").toString().trim().toUpperCase());
+}
+
 function railEquipGroup(code){
 const c = (code || "").trim().toUpperCase();
 if (!c) return "UNKNOWN";
@@ -1047,6 +1091,7 @@ if(SELECTED_MODE==="RAIL" && SELECTED_RAIL_EQ!=="ALL" && SELECTED_RAIL_EQ!=="COM
 const grp = railEquipGroup(r.equip);
 if(grp !== SELECTED_RAIL_EQ) continue;
 }
+if(SELECTED_MODE==="TRUCK" && !truckEquipMatches(r)) continue;
 const scored = scoreRate(r, originFac, destCity, destState, destZip);
 if(scored < 0) continue;
 if(!rateMatchesBand(r, miles)) continue;
@@ -1181,6 +1226,9 @@ badge.innerHTML = quality==="exact"
 : '<span class="match-badge match-none">~ Estimated</span>';
 const isMI = (match.uom||"").toString().toUpperCase() === "MI";
 const isRail = match.mode === "RAIL";
+const isBTrain = match.mode === "TRUCK" && isBTrainEquip(match.equip);
+// B-Train is a flat, all-in lane rate just like rail (no separate fuel line).
+const isAllIn = isRail || isBTrain;
 const equipLabel = match.equip ? ` &nbsp;·&nbsp; <span style="font-size:11px;color:#475569;font-weight:600;">${match.equip}</span>` : "";
 rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}</span>`;
 const currency = match.currency || "USD";
@@ -1191,9 +1239,9 @@ const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : nu
 const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
 const milesFailed = isMI && miles==null;
 const gpAvg = isMI ? gpRate*milesActual : gpRate;
-// Rail rates already include fuel surcharge in the Grand Total - don't add it again
-const gpFuel = isRail ? 0 : (isMI ? gpRate*milesActual*0.25 : gpRate*0.18);
-window._matchData = { type:"single", isMI, isRail, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM };
+// Rail and B-Train rates already include fuel in the rate - don't add it again
+const gpFuel = isAllIn ? 0 : (isMI ? gpRate*milesActual*0.25 : gpRate*0.18);
+window._matchData = { type:"single", isMI, isRail: isAllIn, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM };
 const milesNote = milesFailed
 ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
 : (isMI && miles!=null)
@@ -1217,7 +1265,7 @@ content.innerHTML = `
 <td class="mono" id="adjRPM">${isMI ? fmt(0,currency) : "—"}</td>
 <td class="mono diff-zero" id="diffRPM">—</td>
 </tr>
-${isRail ? `
+${isAllIn ?`
 <tr>
 <td>Fuel Per Load <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(included in rate)</span></td>
 <td class="mono" style="color:var(--text-muted);">included</td>
@@ -1233,7 +1281,7 @@ ${isRail ? `
 </tr>
 `}
 <tr>
-<td>${isRail ? "Total Rate Per Load" : "Avg Rate Per Load"}</td>
+<td>${isAllIn ?"Total Rate Per Load" : "Avg Rate Per Load"}</td>
 <td class="mono" id="gpAvgCell">${fmt(gpAvg,currency)}<span class="currency-badge">${currency}</span></td>
 <td class="mono" id="adjAvgCell">${fmt(0,currency)}</td>
 <td class="mono diff-zero" id="diffAvg">—</td>
