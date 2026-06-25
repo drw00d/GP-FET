@@ -226,6 +226,18 @@ text-align:center;
 /* Hide the Adjust Rate + % Difference columns until an adjustment is entered */
 #rateTable.no-adjust th:nth-child(3),#rateTable.no-adjust td:nth-child(3),
 #rateTable.no-adjust th:nth-child(4),#rateTable.no-adjust td:nth-child(4){display:none;}
+/* Competitor (ECA) comparison table */
+.eca-table{width:100%;border-collapse:collapse;font-size:13px;}
+.eca-table th{text-align:left;color:var(--text-muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:8px 12px;border-bottom:1px solid var(--border);}
+.eca-table td{padding:9px 12px;border-bottom:1px solid var(--border);}
+.eca-table tbody tr:last-child td{border-bottom:none;}
+.eca-loc{color:var(--text-muted);}
+.eca-cheaper{color:#16a34a;font-weight:600;}
+.eca-higher{color:#dc2626;font-weight:600;}
+.eca-toggle{margin:10px 12px 4px;background:none;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;color:var(--text);cursor:pointer;}
+.eca-toggle:hover{background:var(--row-alt);}
+.eca-loading{padding:16px;color:var(--text-muted);font-size:13px;font-style:italic;}
+.eca-note{padding:6px 12px 12px;color:var(--text-muted);font-size:11px;font-style:italic;}
 </style>
 </head>
 <body>
@@ -249,6 +261,7 @@ let SELECTED_MODE = "TRUCK";
 let SELECTED_RAIL_EQ = "COMPARE";  // rail always compares Boxcar vs Centerbeam
 let SELECTED_TRUCK_EQ = "STANDARD";  // STANDARD (dry van etc.) | BTRAIN
 let BTRAIN_ORIGINS = new Set();  // truck origins that actually have B-Train rates (Englehart / Earlton)
+let ECA = {};  // "CITY,STATE" (GP mill) -> [ {name,city,state,postal,country}, ... ] competitor linkages
 
 const RAIL_ORIGIN_LABELS = {
 "ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
@@ -382,6 +395,7 @@ ORIGIN_ZIPS = data.origin_zips || {};
 RAIL_DEST_CITIES = data.rail_dest_cities || [];
 BTRAIN_DEST_CITIES = data.btrain_dest_cities || [];
 BTRAIN_ORIGINS = new Set(RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip) && r.origLoc).map(r=>r.origLoc));
+ECA = data.eca || {};
 buildUI();
 const btrainCount = RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip)).length;
 const truckCount = RATES.filter(r=>r.mode==="TRUCK").length - btrainCount;
@@ -497,6 +511,13 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <div id="resultsContent">
 <div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>
 </div>
+</div>
+<div class="card" id="ecaCard" style="display:none;">
+<div class="results-header">
+<div class="results-header-left">Competitor Estimate <span style="font-size:11px;color:var(--text-muted);font-weight:600;">(ECA)</span></div>
+<div id="ecaVsGp" style="font-size:12px;color:var(--text-muted);"></div>
+</div>
+<div id="ecaContent"></div>
 </div>`;
 refreshOriginOptions();
 rebuildTruckEquipOptions();
@@ -572,6 +593,8 @@ window._matchData = null;
 window._lastRailTotal = null;
 const existing = document.getElementById("truckRailCompareBox");
 if(existing) existing.remove();
+const ecaC = document.getElementById("ecaCard");
+if(ecaC) ecaC.style.display = "none";
 }
 
 function refreshOriginOptions(){
@@ -937,6 +960,7 @@ const hasDest = (destCity && destState) || destZip;
 if(!hasOrigin || !hasDest){ banner.classList.add("show"); return; }
 banner.classList.remove("show");
 hideZipPicker();
+const _ecaCard = document.getElementById("ecaCard"); if(_ecaCard) _ecaCard.style.display = "none";
 
 const btn = document.querySelector(".btn-primary");
 const origText = btn.textContent;
@@ -960,6 +984,7 @@ window._lastQuery = { originFac, destCity, destState, destZip };
 
 const match = findRate(originFac, destCity, destState, destZip, miles);
 displayResults(match, miles);
+renderEcaComparison(match, originFac, destZip, destCity, destState, miles);
 }
 
 async function getMileageCached(originZip, originFac, destZip, destCity, destState){
@@ -1001,6 +1026,120 @@ return Math.round(row.distanceMeters / 1609.34);
 }catch(_){
 return null;
 }
+}
+
+// One Google matrix call: many origins (competitor locations) -> one destination.
+// Returns miles aligned to originStrs (null where no drivable route).
+async function getMileageMatrix(originStrs, destStr){
+if(!GMAPS_KEY || !originStrs.length) return originStrs.map(()=>null);
+try{
+const url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix?key=" + encodeURIComponent(GMAPS_KEY);
+const reqBody = {
+origins: originStrs.map(a=>({ waypoint:{ address:a } })),
+destinations: [{ waypoint:{ address:destStr } }],
+travelMode: "DRIVE",
+routingPreference: "TRAFFIC_UNAWARE"
+};
+const resp = await fetch(url, {
+method:"POST",
+headers:{ "Content-Type":"application/json", "X-Goog-FieldMask":"originIndex,destinationIndex,distanceMeters,condition" },
+body: JSON.stringify(reqBody)
+});
+if(!resp.ok) return originStrs.map(()=>null);
+const data = await resp.json();
+const out = originStrs.map(()=>null);
+if(Array.isArray(data)){
+for(const row of data){
+if(row && row.condition === "ROUTE_EXISTS" && typeof row.distanceMeters === "number" && typeof row.originIndex === "number"){
+out[row.originIndex] = Math.round(row.distanceMeters / 1609.34);
+}
+}
+}
+return out;
+}catch(_){
+return originStrs.map(()=>null);
+}
+}
+
+function _ecaOriginStr(c){
+const base = `${c.city}, ${c.state}`;
+return c.postal ? `${base} ${c.postal}` : base;
+}
+
+function _titleCase(s){ return (s||"").toLowerCase().replace(/\b\w/g, ch=>ch.toUpperCase()); }
+
+// GP per-mile total at 0% adjustment, mirroring displayResults/recalc:
+// max(rate*miles, minCharge) + fuel(25%). Used as the competitor comparison baseline.
+function _gpTotalForCompare(match, miles){
+const rate = Number(match.rate) || 0;
+const m = (miles != null) ? miles : 0;
+const minCharge = Number(match.minCharge) || 0;
+return Math.max(rate * m, minCharge) + (rate * m * 0.25);
+}
+
+// Competitor (ECA) estimate: your same per-mile freight logic, run from each
+// linked competitor's own location to the destination. Standard-truck per-mile only.
+async function renderEcaComparison(match, originFac, destZip, destCity, destState, miles){
+const card = document.getElementById("ecaCard");
+const content = document.getElementById("ecaContent");
+const vsGp = document.getElementById("ecaVsGp");
+if(!card || !content) return;
+
+const isMI = match && (match.uom||"").toString().toUpperCase() === "MI";
+const eligible = match && SELECTED_MODE === "TRUCK" && !isBTrainEquip(match.equip) && isMI;
+const key = (originFac||"").split(",").slice(0,2).join(",");
+const comps = (eligible && ECA[key]) ? ECA[key] : null;
+if(!comps || !comps.length){ card.style.display = "none"; return; }
+
+const myQuery = window._lastQuery;  // identity token to drop stale async results
+const rate = Number(match.rate) || 0;
+const minCharge = Number(match.minCharge) || 0;
+const cur = match.currency || "USD";
+const gpTotal = _gpTotalForCompare(match, miles);
+
+vsGp.textContent = "vs GP " + fmt(gpTotal, cur);
+content.innerHTML = `<div class="eca-loading">Estimating ${comps.length} competitor${comps.length>1?"s":""}…</div>`;
+card.style.display = "block";
+
+const destStr = buildDestString(destZip, destCity, destState);
+const milesArr = await getMileageMatrix(comps.map(_ecaOriginStr), destStr);
+if(window._lastQuery !== myQuery) return;  // a newer quote started; abandon
+
+let noRoute = 0;
+const rows = [];
+comps.forEach((c, i) => {
+const cm = milesArr[i];
+if(cm == null){ noRoute++; return; }
+const est = Math.max(rate * cm, minCharge) + (rate * cm * 0.25);
+rows.push({ name:c.name, loc:`${_titleCase(c.city)}, ${c.state}`, miles:cm, est, delta: est - gpTotal });
+});
+
+if(!rows.length){
+content.innerHTML = `<div class="eca-loading">No competitor mileage available for this destination.</div>`;
+return;
+}
+
+rows.sort((a,b)=> a.est - b.est);
+const renderRow = (r)=>{
+const cls = r.delta < -0.5 ? "eca-cheaper" : (r.delta > 0.5 ? "eca-higher" : "");
+const dot = r.delta < -0.5 ? "🟢 " : (r.delta > 0.5 ? "🔴 " : "");
+const sign = r.delta < 0 ? "−" : "+";
+return `<tr><td>${r.name}</td><td class="eca-loc">${r.loc}</td><td class="mono" style="text-align:right;">${r.miles}</td><td class="mono" style="text-align:right;">${fmt(r.est, cur)}</td><td class="mono ${cls}" style="text-align:right;">${dot}${sign}${fmt(Math.abs(r.delta), cur)}</td></tr>`;
+};
+const head = `<tr><th>Competitor</th><th>Location</th><th style="text-align:right;">Miles</th><th style="text-align:right;">Est. Total</th><th style="text-align:right;">&Delta; vs GP</th></tr>`;
+const TOPN = 5;
+const top = rows.slice(0, TOPN).map(renderRow).join("");
+const rest = rows.slice(TOPN).map(renderRow).join("");
+const noteRoute = noRoute ? `<div class="eca-note">${noRoute} competitor${noRoute>1?"s":""} had no drivable route and were skipped.</div>` : "";
+content.innerHTML = `<table class="eca-table"><thead>${head}</thead><tbody>${top}</tbody>${rest ? `<tbody id="ecaRest" style="display:none;">${rest}</tbody>` : ""}</table>${rest ? `<button class="eca-toggle" onclick="toggleEcaShowAll(this)">Show all ${rows.length}</button>` : ""}${noteRoute}`;
+}
+
+function toggleEcaShowAll(btn){
+const rest = document.getElementById("ecaRest");
+if(!rest) return;
+const hidden = rest.style.display === "none";
+rest.style.display = hidden ? "" : "none";
+btn.textContent = hidden ? "Show top 5" : ("Show all " + document.querySelectorAll(".eca-table tbody tr").length);
 }
 
 function nc(str){ return str ? str.split(",")[0].trim().toUpperCase() : ""; }
