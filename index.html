@@ -223,6 +223,9 @@ border-top:1px solid var(--border);
 background:var(--row-alt);
 text-align:center;
 }
+/* Hide the Adjust Rate + % Difference columns until an adjustment is entered */
+#rateTable.no-adjust th:nth-child(3),#rateTable.no-adjust td:nth-child(3),
+#rateTable.no-adjust th:nth-child(4),#rateTable.no-adjust td:nth-child(4){display:none;}
 </style>
 </head>
 <body>
@@ -1263,7 +1266,7 @@ const milesNote = milesFailed
 ? ' <span style="font-size:11px;color:#16a34a;font-style:italic;">via Google Maps</span>'
 : '';
 content.innerHTML = `
-<table>
+<table id="rateTable" class="no-adjust">
 <thead>
 <tr><th>Item</th><th>GP Rate</th><th>Adjust Rate</th><th>% Difference</th></tr>
 </thead>
@@ -1389,6 +1392,9 @@ const data = window._matchData;
 if(!data || data.type !== "single") return;
 const pct = Number(document.getElementById("pctAdj").value) || 0;
 const factor = 1 + pct/100;
+// Only show the Adjust Rate + % Difference columns once a real adjustment exists
+const _tbl = document.getElementById("rateTable");
+if(_tbl) _tbl.classList.toggle("no-adjust", pct === 0);
 const { isMI, isRail, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM } = data;
 
 const adjAvg = Math.max(gpAvg * factor, minCharge);
