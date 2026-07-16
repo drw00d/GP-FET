@@ -238,6 +238,10 @@ text-align:center;
 .eca-toggle:hover{background:var(--row-alt);}
 .eca-loading{padding:16px;color:var(--text-muted);font-size:13px;font-style:italic;}
 .eca-note{padding:6px 12px 12px;color:var(--text-muted);font-size:11px;font-style:italic;}
+/* Rail route + carrier split (compare cards) */
+.rail-route-block{padding:6px 0;border-bottom:1px solid var(--border);}
+.rail-route-block .truck-rail-label{display:block;font-size:13px;margin-bottom:3px;}
+.rail-route-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);word-break:break-word;line-height:1.5;}
 </style>
 </head>
 <body>
@@ -368,6 +372,8 @@ destLoc: r[12],
 destStateField: r[13],
 destPostal: r[14],
 destCountry: r[15],
+route: r[16] || "",
+carrierSplit: r[17] || "",
 };
 }
 return {
@@ -1457,6 +1463,16 @@ document.getElementById("pctAdj").value = 0;
 recalc();
 }
 
+function _splitSum(s){
+if(!s) return null;
+const nums = (String(s).match(/\$\s*[\d,]+\.?\d*/g) || []).map(x => parseFloat(x.replace(/[$,\s]/g,"")));
+return nums.length ? nums.reduce((a,b)=>a+b,0) : null;
+}
+
+function _routeArrows(route){
+return route ? String(route).split("-").join(" → ") : "";
+}
+
 function displayCompareResults(boxcar, centerbeam, miles){
 currentMatch = null;
 currentCompareMatches = { boxcar, centerbeam, miles };
@@ -1491,11 +1507,21 @@ winnerNote = `<div class="compare-winner">💰 Centerbeam saves ${fmt(Math.abs(d
 
 const cardHtml = (label, m, cur, total) => {
 if(!m) return `<div class="compare-card"><div class="compare-title">${label}</div><div style="padding:16px;color:var(--text-muted);font-size:13px;">No rate found.</div></div>`;
+const routeArrows = _routeArrows(m.route);
+const split = m.carrierSplit || "";
+const ssum = _splitSum(split);
+const gap = (ssum != null) ? (total - ssum) : 0;
+let feesRow = "";
+if(gap >= 0.02) feesRow = `<div class="truck-rail-row"><span class="truck-rail-label">+ Other fees</span><span class="truck-rail-value">${fmt(gap,cur)}</span></div>`;
+else if(gap <= -0.02) feesRow = `<div class="truck-rail-row"><span class="truck-rail-label">Adjustment</span><span class="truck-rail-value">−${fmt(Math.abs(gap),cur)}</span></div>`;
 return `<div class="compare-card">
 <div class="compare-title">${label} &nbsp;·&nbsp; <span style="font-weight:500;color:var(--text-muted);">${m.equip||""}</span></div>
 <div style="padding:14px 16px;">
 <div class="truck-rail-row"><span class="truck-rail-label">Equipment</span><span class="truck-rail-value">${m.equip||"—"}</span></div>
 <div class="truck-rail-row"><span class="truck-rail-label">Currency</span><span class="truck-rail-value">${cur}</span></div>
+${routeArrows ? `<div class="rail-route-block"><span class="truck-rail-label">Route</span><div class="rail-route-val">${routeArrows}</div></div>` : ""}
+${split ? `<div class="rail-route-block"><span class="truck-rail-label">Carrier split</span><div class="rail-route-val">${split}</div></div>` : ""}
+${feesRow}
 <div class="truck-rail-row"><span class="truck-rail-label">Total Rate</span><span class="truck-rail-value">${fmt(total,cur)}</span></div>
 </div>
 </div>`;
