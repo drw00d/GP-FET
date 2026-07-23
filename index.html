@@ -979,14 +979,19 @@ const miles = await getMileageCached(originZip, originFac, destZip, destCity, de
 btn.textContent = origText;
 btn.disabled = false;
 
+window._lastQuery = { originFac, destCity, destState, destZip };
+
 if(SELECTED_MODE === "RAIL" && SELECTED_RAIL_EQ === "COMPARE"){
 const boxcar = findRateByGroup(originFac, destCity, destState, destZip, "BOXCAR");
 const centerbeam = findRateByGroup(originFac, destCity, destState, destZip, "CENTERBEAM");
 displayCompareResults(boxcar, centerbeam, miles);
+// ECA yardstick = the cheaper available lane (what GP would most likely quote).
+const bcT = boxcar ? (Number(boxcar.flat)||Infinity) : Infinity;
+const cbT = centerbeam ? (Number(centerbeam.flat)||Infinity) : Infinity;
+const ecaMatch = (bcT <= cbT ? boxcar : centerbeam) || boxcar || centerbeam;
+renderEcaComparison(ecaMatch, originFac, destZip, destCity, destState, miles);
 return;
 }
-
-window._lastQuery = { originFac, destCity, destState, destZip };
 
 const match = findRate(originFac, destCity, destState, destZip, miles);
 displayResults(match, miles);
@@ -1083,8 +1088,13 @@ const minCharge = Number(match.minCharge) || 0;
 return Math.max(rate * m, minCharge) + (rate * m * 0.25);
 }
 
-// Competitor (ECA) estimate: your same per-mile freight logic, run from each
-// linked competitor's own location to the destination. Standard-truck per-mile only.
+// Competitor (ECA) estimate: your same freight logic, run from each linked
+// competitor's own location to the destination.
+//   TRUCK: standard per-mile lanes — apply GP's per-mile rate + 25% fuel over
+//          the competitor's drive distance (B-Train flat lanes are skipped).
+//   RAIL:  all-in flat lanes — derive GP's implied $/mi (flat total ÷ GP miles)
+//          and apply it over the competitor's distance (fuel already included,
+//          so no separate fuel line). Needs GP Google miles to set the yardstick.
 async function renderEcaComparison(match, originFac, destZip, destCity, destState, miles){
 const card = document.getElementById("ecaCard");
 const content = document.getElementById("ecaContent");
@@ -1092,7 +1102,14 @@ const vsGp = document.getElementById("ecaVsGp");
 if(!card || !content) return;
 
 const isMI = match && (match.uom||"").toString().toUpperCase() === "MI";
-const eligible = match && SELECTED_MODE === "TRUCK" && !isBTrainEquip(match.equip) && isMI;
+const isRail = !!match && match.mode === "RAIL";
+// Rail yardstick: GP flat lane total expressed as an implied per-mile rate.
+const railFlat = isRail ? (Number(match.flat) || 0) : 0;
+const railRPM = (isRail && miles != null && miles > 0 && railFlat > 0) ? (railFlat / miles) : null;
+const eligible = !!match && (
+(SELECTED_MODE === "TRUCK" && !isBTrainEquip(match.equip) && isMI) ||
+(SELECTED_MODE === "RAIL" && railRPM != null)
+);
 const key = (originFac||"").split(",").slice(0,2).join(",");
 const comps = (eligible && ECA[key]) ? ECA[key] : null;
 if(!comps || !comps.length){ card.style.display = "none"; return; }
@@ -1101,7 +1118,7 @@ const myQuery = window._lastQuery;  // identity token to drop stale async result
 const rate = Number(match.rate) || 0;
 const minCharge = Number(match.minCharge) || 0;
 const cur = match.currency || "USD";
-const gpTotal = _gpTotalForCompare(match, miles);
+const gpTotal = isRail ? railFlat : _gpTotalForCompare(match, miles);
 
 vsGp.textContent = "vs GP " + fmt(gpTotal, cur);
 content.innerHTML = `<div class="eca-loading">Estimating ${comps.length} competitor${comps.length>1?"s":""}…</div>`;
@@ -1116,7 +1133,10 @@ const rows = [];
 comps.forEach((c, i) => {
 const cm = milesArr[i];
 if(cm == null){ noRoute++; return; }
-const est = Math.max(rate * cm, minCharge) + (rate * cm * 0.25);
+// Rail is all-in (fuel included); truck adds 25% fuel on top of per-mile line-haul.
+const est = isRail
+? (railRPM * cm)
+: (Math.max(rate * cm, minCharge) + (rate * cm * 0.25));
 rows.push({ name:c.name, loc:`${_titleCase(c.city)}, ${c.state}`, miles:cm, est, delta: est - gpTotal });
 });
 
@@ -1137,7 +1157,10 @@ const TOPN = 5;
 const top = rows.slice(0, TOPN).map(renderRow).join("");
 const rest = rows.slice(TOPN).map(renderRow).join("");
 const noteRoute = noRoute ? `<div class="eca-note">${noRoute} competitor${noRoute>1?"s":""} had no drivable route and were skipped.</div>` : "";
-content.innerHTML = `<table class="eca-table"><thead>${head}</thead><tbody>${top}</tbody>${rest ? `<tbody id="ecaRest" style="display:none;">${rest}</tbody>` : ""}</table>${rest ? `<button class="eca-toggle" onclick="toggleEcaShowAll(this)">Show all ${rows.length}</button>` : ""}${noteRoute}`;
+const noteMethod = isRail
+? `<div class="eca-note">Rail estimate uses GP's implied ${fmt(railRPM, cur)}/mi (lane total ÷ ${miles} mi) applied to each competitor's distance — fuel included.</div>`
+: "";
+content.innerHTML = `<table class="eca-table"><thead>${head}</thead><tbody>${top}</tbody>${rest ? `<tbody id="ecaRest" style="display:none;">${rest}</tbody>` : ""}</table>${rest ? `<button class="eca-toggle" onclick="toggleEcaShowAll(this)">Show all ${rows.length}</button>` : ""}${noteMethod}${noteRoute}`;
 }
 
 function toggleEcaShowAll(btn){
