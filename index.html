@@ -1427,7 +1427,10 @@ const milesFailed = isMI && miles==null;
 const gpAvg = isMI ? gpRate*milesActual : gpRate;
 // Rail and B-Train rates already include fuel in the rate - don't add it again
 const gpFuel = isAllIn ? 0 : (isMI ? gpRate*milesActual*0.25 : gpRate*0.18);
-window._matchData = { type:"single", isMI, isRail: isAllIn, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM };
+// Rate Per Mile is shown ALL-IN, per user: Total Freight (avg + fuel) / miles.
+const rpmMiles = isMI ? milesActual : miles;
+const gpAllInRPM = (rpmMiles && rpmMiles > 0) ? (gpAvg + gpFuel) / rpmMiles : null;
+window._matchData = { type:"single", isMI, isRail: isAllIn, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM, rpmMiles };
 const milesNote = milesFailed
 ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
 : (isMI && miles!=null)
@@ -1446,9 +1449,9 @@ content.innerHTML = `
 <td class="mono diff-zero">—</td>
 </tr>
 <tr>
-<td>Rate Per Mile</td>
-<td class="mono" id="gpRPM">${isMI ? fmt(gpRate,currency) : (derivedRPM != null ? fmt(derivedRPM,currency) : "—")}<span class="currency-badge">${currency}</span></td>
-<td class="mono" id="adjRPM">${isMI ? fmt(0,currency) : "—"}</td>
+<td>Rate Per Mile <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(incl. fuel)</span></td>
+<td class="mono" id="gpRPM">${gpAllInRPM != null ? fmt(gpAllInRPM,currency) : "—"}<span class="currency-badge">${currency}</span></td>
+<td class="mono" id="adjRPM">${gpAllInRPM != null ? fmt(gpAllInRPM,currency) : "—"}</td>
 <td class="mono diff-zero" id="diffRPM">—</td>
 </tr>
 ${isAllIn ?`
@@ -1583,11 +1586,10 @@ const factor = 1 + pct/100;
 // Only show the Adjust Rate + % Difference columns once a real adjustment exists
 const _tbl = document.getElementById("rateTable");
 if(_tbl) _tbl.classList.toggle("no-adjust", pct === 0);
-const { isMI, isRail, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM } = data;
+const { isMI, isRail, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM, rpmMiles } = data;
 
 const adjAvg = Math.max(gpAvg * factor, minCharge);
 const adjFuel = gpFuel * factor;
-const adjRPM = isMI ? gpRate * factor : null;
 
 const gpTotal = gpAvg + gpFuel;
 const adjTotal = adjAvg + adjFuel;
@@ -1600,14 +1602,13 @@ el.innerHTML = html;
 if(cls){ el.className = "mono " + cls; }
 };
 
-if(isMI){
-setCell("adjRPM", `${fmt(adjRPM,currency)}<span class="currency-badge">${currency}</span>`);
-const rpmPct = gpRate > 0 ? ((adjRPM - gpRate)/gpRate)*100 : 0;
-setCell("diffRPM", fmtPct(rpmPct), pctClass(rpmPct));
-}else if(derivedRPM != null){
-const adjDerived = derivedRPM * factor;
-setCell("adjRPM", `${fmt(adjDerived,currency)}<span class="currency-badge">${currency}</span>`);
-const rpmPct = derivedRPM > 0 ? ((adjDerived - derivedRPM)/derivedRPM)*100 : 0;
+// Rate Per Mile = all-in Total Freight / miles (GP column set in displayResults;
+// here we update the adjusted column and % difference).
+if(rpmMiles && rpmMiles > 0){
+const gpAllInRPM = gpTotal / rpmMiles;
+const adjAllInRPM = adjTotal / rpmMiles;
+setCell("adjRPM", `${fmt(adjAllInRPM,currency)}<span class="currency-badge">${currency}</span>`);
+const rpmPct = gpAllInRPM > 0 ? ((adjAllInRPM - gpAllInRPM)/gpAllInRPM)*100 : 0;
 setCell("diffRPM", fmtPct(rpmPct), pctClass(rpmPct));
 }
 
