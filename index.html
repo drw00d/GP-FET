@@ -393,9 +393,18 @@ destCountry: r[14],
 
 async function loadRates(){
 try{
+// Rate data is served gzip-compressed (rates.json.gz, ~2-3 MB vs ~38 MB raw).
+let data;
+if("DecompressionStream" in window){
+const res = await fetch("rates.json.gz?_="+Date.now());
+if(!res.ok) throw new Error("HTTP "+res.status+" loading rates.json.gz");
+const stream = res.body.pipeThrough(new DecompressionStream("gzip"));
+data = JSON.parse(await new Response(stream).text());
+}else{
 const res = await fetch("rates.json?_="+Date.now());
-if(!res.ok) throw new Error("HTTP "+res.status);
-const data = await res.json();
+if(!res.ok) throw new Error("This browser can't decompress the data - please use Edge, Chrome, or Firefox.");
+data = await res.json();
+}
 RATES = (data.rates || []).map(normRow).filter(Boolean);
 ORIGIN_ZIPS = data.origin_zips || {};
 RAIL_DEST_CITIES = data.rail_dest_cities || [];
@@ -415,7 +424,7 @@ loadGoogleMapsJS().then(()=>initDestinationAutocomplete()).catch(()=>{});
 }catch(e){
 document.getElementById("appContainer").innerHTML =
 '<div class="card"><div class="card-body"><div class="load-error">' +
-'⚠️ Could not load rates.json — make sure the file is in the same folder as index.html.<br><small>' +
+'⚠️ Could not load the rate data (rates.json.gz). Try a hard refresh; if it persists, the data file may be missing or the browser too old.<br><small>' +
 e.message + '</small></div></div></div>';
 document.getElementById("dataStatus").textContent = "Load failed";
 }
