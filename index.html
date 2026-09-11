@@ -234,6 +234,11 @@ text-align:center;
 .eca-loc{color:var(--text-muted);}
 .eca-pos{color:#16a34a;font-weight:600;}
 .eca-neg{color:#dc2626;font-weight:600;}
+/* Business-unit badges (Gypsum vs Wood Products vs Other) */
+.biz-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;line-height:1.5;vertical-align:middle;letter-spacing:.02em;white-space:nowrap;}
+.biz-gyp{background:#e0f2fe;color:#075985;border:1px solid #7dd3fc;}
+.biz-wood{background:#dcfce7;color:#166534;border:1px solid #86efac;}
+.biz-other{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;}
 .eca-toggle{margin:10px 12px 4px;background:none;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;color:var(--text);cursor:pointer;}
 .eca-toggle:hover{background:var(--row-alt);}
 .eca-loading{padding:16px;color:var(--text-muted);font-size:13px;font-style:italic;}
@@ -257,6 +262,8 @@ MattGPT Freight Estimate Tool
 const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg";
 let RATES = [];
 let ORIGIN_ZIPS = {};
+let ORIGIN_BUSINESS = {};          // "CITY,STATE,COUNTRY" -> "Gypsum"|"Wood Products"|"Other/Distribution"
+let SELECTED_BUSINESS = "ALL";     // Business-unit filter for the origin list
 let RAIL_DEST_CITIES = [];  // [[city, state, country], ...] from rates.json for autocomplete
 let BTRAIN_DEST_CITIES = [];  // B-Train (Intra-Canada) destinations for autocomplete fallback
 let currentMatch = null;
@@ -411,7 +418,9 @@ RAIL_DEST_CITIES = data.rail_dest_cities || [];
 BTRAIN_DEST_CITIES = data.btrain_dest_cities || [];
 BTRAIN_ORIGINS = new Set(RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip) && r.origLoc).map(r=>r.origLoc));
 ECA = data.eca || {};
+ORIGIN_BUSINESS = data.origin_business || {};
 buildUI();
+buildBusinessFilterOptions();
 const btrainCount = RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip)).length;
 const truckCount = RATES.filter(r=>r.mode==="TRUCK").length - btrainCount;
 const railCount = RATES.filter(r=>r.mode==="RAIL").length;
@@ -436,8 +445,10 @@ document.getElementById("appContainer").innerHTML = `
 <div class="card-body">
 <div class="form-grid">
 <div class="field">
-<label>Owner / Organization</label>
-<input type="text" id="owner" value="WOOD_PRODUCTS">
+<label>Business Unit</label>
+<select id="businessFilter" onchange="onBusinessFilterChange()">
+<option value="ALL">All</option>
+</select>
 </div>
 <div class="field" style="align-items:flex-start;">
 <label>Equipment Mode</label>
@@ -457,7 +468,7 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <div class="section-label">Origin</div>
 <div class="form-row-5">
 <div class="field">
-<label>Origin Facility</label>
+<label>Origin Facility <span id="originBizBadge" class="biz-badge" hidden></span></label>
 <select id="originFacility" onchange="onOriginChange()">
 <option value="">-- Select Origin --</option>
 </select>
@@ -512,7 +523,7 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 </div>
 <div class="card" id="resultsCard">
 <div class="results-header">
-<div class="results-header-left">Rate Type <span id="rateTypeBadge"></span></div>
+<div class="results-header-left">Rate Type <span id="rateTypeBadge"></span> <span id="bizBadgeResult"></span></div>
 <div id="matchBadge"></div>
 </div>
 <div class="adj-panel">
@@ -612,18 +623,76 @@ const ecaC = document.getElementById("ecaCard");
 if(ecaC) ecaC.style.display = "none";
 }
 
+// ---- Business unit (Gypsum / Wood Products / Other) helpers ----
+function originBusinessOf(loc){ return ORIGIN_BUSINESS[loc] || ""; }
+function bizLabel(b){ return b === "Other/Distribution" ? "Other" : b; }
+function bizShort(b){ return b === "Wood Products" ? "Wood" : bizLabel(b); }
+function bizClass(b){ return b === "Gypsum" ? "biz-gyp" : b === "Wood Products" ? "biz-wood" : "biz-other"; }
+function bizBadgeHTML(b){ return b ? `<span class="biz-badge ${bizClass(b)}">${bizLabel(b)}</span>` : ""; }
+
+function businessesPresent(){
+const order = ["Gypsum","Wood Products","Other/Distribution"];
+const present = new Set(Object.values(ORIGIN_BUSINESS));
+return order.filter(b => present.has(b));
+}
+
+function buildBusinessFilterOptions(){
+const sel = document.getElementById("businessFilter");
+if(!sel) return;
+const list = businessesPresent();
+sel.innerHTML = `<option value="ALL">All</option>` +
+list.map(b => `<option value="${b}">${bizLabel(b)}</option>`).join("");
+// Nothing tagged (e.g. lookup file missing) -> hide the filter entirely.
+const wrap = sel.closest(".field");
+if(wrap) wrap.hidden = (list.length === 0);
+if(!list.includes(SELECTED_BUSINESS)) SELECTED_BUSINESS = "ALL";
+sel.value = SELECTED_BUSINESS;
+}
+
+function onBusinessFilterChange(){
+SELECTED_BUSINESS = document.getElementById("businessFilter").value || "ALL";
+document.getElementById("originFacility").value = "";
+refreshOriginOptions();
+rebuildTruckEquipOptions();
+}
+
+function updateOriginBadge(){
+const badge = document.getElementById("originBizBadge");
+if(!badge) return;
+const val = document.getElementById("originFacility")?.value || "";
+const b = val ? originBusinessOf(val) : "";
+if(b){ badge.className = "biz-badge " + bizClass(b); badge.textContent = bizLabel(b); badge.hidden = false; }
+else { badge.hidden = true; badge.textContent = ""; }
+}
+
+function updateResultBadge(){
+const el = document.getElementById("bizBadgeResult");
+if(!el) return;
+const val = document.getElementById("originFacility")?.value || "";
+el.innerHTML = val ? bizBadgeHTML(originBusinessOf(val)) : "";
+}
+
 function refreshOriginOptions(){
 const originSelect = document.getElementById("originFacility");
 if(!originSelect) return;
-const origins = getOriginsForMode(SELECTED_MODE);
+let origins = getOriginsForMode(SELECTED_MODE);
+if(SELECTED_BUSINESS !== "ALL"){
+origins = origins.filter(o => originBusinessOf(o) === SELECTED_BUSINESS);
+}
 originSelect.innerHTML = `<option value="">-- Select Origin --</option>` +
 origins.map(o=>{
-const label = (SELECTED_MODE === "RAIL" && RAIL_ORIGIN_LABELS[o]) ? RAIL_ORIGIN_LABELS[o] : o;
+let label = (SELECTED_MODE === "RAIL" && RAIL_ORIGIN_LABELS[o]) ? RAIL_ORIGIN_LABELS[o] : o;
+// When viewing All, suffix each option with its unit for at-a-glance context.
+if(SELECTED_BUSINESS === "ALL"){
+const b = originBusinessOf(o);
+if(b) label += "  ·  " + bizShort(b);
+}
 return `<option value="${o}">${label}</option>`;
 }).join("");
 document.getElementById("originCity").value="";
 document.getElementById("originState").value="";
 document.getElementById("originZip").value="";
+updateOriginBadge();
 }
 
 function getOriginsForMode(mode){
@@ -649,6 +718,7 @@ document.getElementById("originCity").value="";
 document.getElementById("originState").value="";
 document.getElementById("originZip").value="";
 rebuildTruckEquipOptions();
+updateOriginBadge();
 return;
 }
 const parts = val.split(",");
@@ -656,6 +726,7 @@ document.getElementById("originCity").value = (parts[0]||"").trim();
 document.getElementById("originState").value = (parts[1]||"").trim();
 document.getElementById("originZip").value = ORIGIN_ZIPS[val] || "";
 rebuildTruckEquipOptions();
+updateOriginBadge();
 }
 
 let _destAutocomplete = null;
@@ -1404,6 +1475,7 @@ return origScore*10 + destScore;
 function displayResults(match, miles){
 currentMatch = match;
 currentCompareMatches = null;
+updateResultBadge();
 const badge = document.getElementById("matchBadge");
 const rateTypeBadge = document.getElementById("rateTypeBadge");
 const content = document.getElementById("resultsContent");
@@ -1511,6 +1583,7 @@ return route ? String(route).split("-").join(" → ") : "";
 function displayCompareResults(boxcar, centerbeam, miles){
 currentMatch = null;
 currentCompareMatches = { boxcar, centerbeam, miles };
+updateResultBadge();
 const badge = document.getElementById("matchBadge");
 const rateTypeBadge = document.getElementById("rateTypeBadge");
 const content = document.getElementById("resultsContent");
