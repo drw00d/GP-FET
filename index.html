@@ -688,6 +688,9 @@ const val = document.getElementById("originFacility")?.value || "";
 el.innerHTML = val ? divBadgeHTML(originDivisionOf(val)) : "";
 }
 
+// Preferred display order for division groups in the origin dropdown.
+const DIVISION_ORDER = ["GYPSUM", "LUMBER", "STRUCT PANELS", "STRUCT PANELS / LUMBER"];
+
 function refreshOriginOptions(){
 const originSelect = document.getElementById("originFacility");
 if(!originSelect) return;
@@ -695,16 +698,30 @@ let origins = getOriginsForMode(SELECTED_MODE);
 if(SELECTED_BUSINESS !== "ALL"){
 origins = origins.filter(o => originBusinessOf(o) === SELECTED_BUSINESS);
 }
-originSelect.innerHTML = `<option value="">-- Select Origin --</option>` +
-origins.map(o=>{
-let label = (SELECTED_MODE === "RAIL" && RAIL_ORIGIN_LABELS[o]) ? RAIL_ORIGIN_LABELS[o] : o;
-// When viewing All, suffix each option with its division for at-a-glance context.
-if(SELECTED_BUSINESS === "ALL"){
-const d = originDivisionOf(o);
-if(d) label += "  ·  " + d;
+const labelFor = (o) => (SELECTED_MODE === "RAIL" && RAIL_ORIGIN_LABELS[o]) ? RAIL_ORIGIN_LABELS[o] : o;
+// Group the list by Division so LUMBER vs STRUCT PANELS is obvious at a glance.
+const groups = new Map();
+for(const o of origins){
+const d = originDivisionOf(o) || "Other";
+if(!groups.has(d)) groups.set(d, []);
+groups.get(d).push(o);
 }
-return `<option value="${o}">${label}</option>`;
-}).join("");
+const divs = Array.from(groups.keys()).sort((a,b)=>{
+const ia = DIVISION_ORDER.indexOf(a), ib = DIVISION_ORDER.indexOf(b);
+return (ia<0?99:ia) - (ib<0?99:ib) || a.localeCompare(b);
+});
+let html = `<option value="">-- Select Origin --</option>`;
+if(divs.length <= 1){
+// Only one division present -> a flat list is cleaner than a single group.
+for(const o of origins) html += `<option value="${o}">${labelFor(o)}</option>`;
+} else {
+for(const d of divs){
+html += `<optgroup label="${d}">`;
+for(const o of groups.get(d)) html += `<option value="${o}">${labelFor(o)}</option>`;
+html += `</optgroup>`;
+}
+}
+originSelect.innerHTML = html;
 document.getElementById("originCity").value="";
 document.getElementById("originState").value="";
 document.getElementById("originZip").value="";
