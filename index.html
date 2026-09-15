@@ -236,9 +236,11 @@ text-align:center;
 .eca-neg{color:#dc2626;font-weight:600;}
 /* Business-unit badges (Gypsum vs Wood Products vs Other) */
 .biz-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;line-height:1.5;vertical-align:middle;letter-spacing:.02em;white-space:nowrap;}
-.biz-gyp{background:#e0f2fe;color:#075985;border:1px solid #7dd3fc;}
-.biz-wood{background:#dcfce7;color:#166534;border:1px solid #86efac;}
-.biz-other{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;}
+.biz-gyp{background:#e0f2fe;color:#075985;border:1px solid #7dd3fc;}    /* Gypsum - blue */
+.biz-wood{background:#dcfce7;color:#166534;border:1px solid #86efac;}   /* Lumber - green */
+.biz-panel{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;}  /* Struct Panels - amber */
+.biz-mix{background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;}    /* Struct Panels / Lumber - purple */
+.biz-other{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;}  /* other/unknown - gray */
 .eca-toggle{margin:10px 12px 4px;background:none;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;color:var(--text);cursor:pointer;}
 .eca-toggle:hover{background:var(--row-alt);}
 .eca-loading{padding:16px;color:var(--text-muted);font-size:13px;font-style:italic;}
@@ -262,7 +264,8 @@ MattGPT Freight Estimate Tool
 const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg";
 let RATES = [];
 let ORIGIN_ZIPS = {};
-let ORIGIN_BUSINESS = {};          // "CITY,STATE,COUNTRY" -> "Gypsum"|"Wood Products"|"Other/Distribution"
+let ORIGIN_BUSINESS = {};          // "CITY,STATE,COUNTRY" -> "Gypsum"|"Wood Products"|"Other/Distribution" (drives the filter)
+let ORIGIN_DIVISION = {};          // "CITY,STATE,COUNTRY" -> "GYPSUM"|"LUMBER"|"STRUCT PANELS"|... (drives the badge)
 let SELECTED_BUSINESS = "ALL";     // Business-unit filter for the origin list
 let RAIL_DEST_CITIES = [];  // [[city, state, country], ...] from rates.json for autocomplete
 let BTRAIN_DEST_CITIES = [];  // B-Train (Intra-Canada) destinations for autocomplete fallback
@@ -419,6 +422,7 @@ BTRAIN_DEST_CITIES = data.btrain_dest_cities || [];
 BTRAIN_ORIGINS = new Set(RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip) && r.origLoc).map(r=>r.origLoc));
 ECA = data.eca || {};
 ORIGIN_BUSINESS = data.origin_business || {};
+ORIGIN_DIVISION = data.origin_division || {};
 buildUI();
 buildBusinessFilterOptions();
 const btrainCount = RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip)).length;
@@ -630,6 +634,18 @@ function bizShort(b){ return b === "Wood Products" ? "Wood" : bizLabel(b); }
 function bizClass(b){ return b === "Gypsum" ? "biz-gyp" : b === "Wood Products" ? "biz-wood" : "biz-other"; }
 function bizBadgeHTML(b){ return b ? `<span class="biz-badge ${bizClass(b)}">${bizLabel(b)}</span>` : ""; }
 
+// ---- Division (product line) helpers -> drive the per-origin badge/tag ----
+function originDivisionOf(loc){ return ORIGIN_DIVISION[loc] || ""; }
+function divClass(d){
+const u = (d || "").toUpperCase();
+if(u.indexOf("STRUCT") >= 0 && u.indexOf("LUMBER") >= 0) return "biz-mix";
+if(u.indexOf("GYPSUM") >= 0) return "biz-gyp";
+if(u.indexOf("STRUCT") >= 0) return "biz-panel";
+if(u.indexOf("LUMBER") >= 0) return "biz-wood";
+return "biz-other";
+}
+function divBadgeHTML(d){ return d ? `<span class="biz-badge ${divClass(d)}">${d}</span>` : ""; }
+
 function businessesPresent(){
 const order = ["Gypsum","Wood Products","Other/Distribution"];
 const present = new Set(Object.values(ORIGIN_BUSINESS));
@@ -660,8 +676,8 @@ function updateOriginBadge(){
 const badge = document.getElementById("originBizBadge");
 if(!badge) return;
 const val = document.getElementById("originFacility")?.value || "";
-const b = val ? originBusinessOf(val) : "";
-if(b){ badge.className = "biz-badge " + bizClass(b); badge.textContent = bizLabel(b); badge.hidden = false; }
+const d = val ? originDivisionOf(val) : "";
+if(d){ badge.className = "biz-badge " + divClass(d); badge.textContent = d; badge.hidden = false; }
 else { badge.hidden = true; badge.textContent = ""; }
 }
 
@@ -669,7 +685,7 @@ function updateResultBadge(){
 const el = document.getElementById("bizBadgeResult");
 if(!el) return;
 const val = document.getElementById("originFacility")?.value || "";
-el.innerHTML = val ? bizBadgeHTML(originBusinessOf(val)) : "";
+el.innerHTML = val ? divBadgeHTML(originDivisionOf(val)) : "";
 }
 
 function refreshOriginOptions(){
@@ -682,10 +698,10 @@ origins = origins.filter(o => originBusinessOf(o) === SELECTED_BUSINESS);
 originSelect.innerHTML = `<option value="">-- Select Origin --</option>` +
 origins.map(o=>{
 let label = (SELECTED_MODE === "RAIL" && RAIL_ORIGIN_LABELS[o]) ? RAIL_ORIGIN_LABELS[o] : o;
-// When viewing All, suffix each option with its unit for at-a-glance context.
+// When viewing All, suffix each option with its division for at-a-glance context.
 if(SELECTED_BUSINESS === "ALL"){
-const b = originBusinessOf(o);
-if(b) label += "  ·  " + bizShort(b);
+const d = originDivisionOf(o);
+if(d) label += "  ·  " + d;
 }
 return `<option value="${o}">${label}</option>`;
 }).join("");
