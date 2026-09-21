@@ -271,6 +271,7 @@ let RAIL_DEST_CITIES = [];  // [[city, state, country], ...] from rates.json for
 let BTRAIN_DEST_CITIES = [];  // B-Train (Intra-Canada) destinations for autocomplete fallback
 let currentMatch = null;
 let currentCompareMatches = null;
+let SELECTED_CUSTOMER = "";
 let SELECTED_MODE = "TRUCK";
 let SELECTED_RAIL_EQ = "COMPARE";  // rail always compares Boxcar vs Centerbeam
 let SELECTED_TRUCK_EQ = "STANDARD";  // STANDARD (dry van etc.) | BTRAIN
@@ -384,6 +385,7 @@ destPostal: r[14],
 destCountry: r[15],
 route: r[16] || "",
 carrierSplit: r[17] || "",
+customer: r[18] || "",
 };
 }
 return {
@@ -415,7 +417,7 @@ const res = await fetch("rates.json?_="+Date.now());
 if(!res.ok) throw new Error("This browser can't decompress the data - please use Edge, Chrome, or Firefox.");
 data = await res.json();
 }
-RATES = (data.rates || []).map(normRow).filter(Boolean);
+RATES = [...(data.rates || []), ...(data.customer_rates || [])].map(normRow).filter(Boolean);
 ORIGIN_ZIPS = data.origin_zips || {};
 RAIL_DEST_CITIES = data.rail_dest_cities || [];
 BTRAIN_DEST_CITIES = data.btrain_dest_cities || [];
@@ -460,6 +462,14 @@ document.getElementById("appContainer").innerHTML = `
 <button id="modeTruck" class="${SELECTED_MODE==="TRUCK"?"active":""}" onclick="setMode('TRUCK')">🚚 Truck</button>
 <button id="modeRail" class="${SELECTED_MODE==="RAIL"?"active":""}" onclick="setMode('RAIL')">🚂 Rail</button>
 </div>
+</div>
+<div class="field">
+<label for="customerFilter">Customer</label>
+<select id="customerFilter" onchange="onCustomerChange()">
+<option value="">General rates</option>
+<option value="LOWES">Lowe's</option>
+<option value="HOME DEPOT">Home Depot</option>
+</select>
 </div>
 <div class="field">
 <label>Week Of</label>
@@ -569,6 +579,14 @@ if(rcp && !e.target.closest("#railCityPicker") && !e.target.closest("#destCity")
 window.addEventListener("scroll",()=>{ hideZipPicker(); hideRailCityPicker(); },{passive:true});
 window.addEventListener("resize",()=>{ hideZipPicker(); hideRailCityPicker(); },{passive:true});
 initDestinationAutocomplete();
+}
+
+function onCustomerChange(){
+SELECTED_CUSTOMER = document.getElementById("customerFilter").value;
+clearResultsOnly();
+}
+function customerMatches(r){
+return !r.customer || r.customer === SELECTED_CUSTOMER;
 }
 
 function setMode(mode){
@@ -1386,6 +1404,7 @@ function findRate(originFac, destCity, destState, destZip, miles){
 let best=null, bestScore=-1, bestPriority=999, bestPrice=Infinity;
 for(const r of RATES){
 if(r.mode !== SELECTED_MODE) continue;
+if(!customerMatches(r)) continue;
 if(SELECTED_MODE==="RAIL" && SELECTED_RAIL_EQ!=="ALL" && SELECTED_RAIL_EQ!=="COMPARE"){
 const grp = railEquipGroup(r.equip);
 if(grp !== SELECTED_RAIL_EQ) continue;
@@ -1528,9 +1547,9 @@ const isMI = (match.uom||"").toString().toUpperCase() === "MI";
 const isRail = match.mode === "RAIL";
 const isBTrain = match.mode === "TRUCK" && isBTrainEquip(match.equip);
 // B-Train is a flat, all-in lane rate just like rail (no separate fuel line).
-const isAllIn = isRail || isBTrain;
+const isAllIn = isRail || isBTrain || Boolean(match.customer);
 const equipLabel = match.equip ? ` &nbsp;·&nbsp; <span style="font-size:11px;color:#475569;font-weight:600;">${match.equip}</span>` : "";
-rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}</span>`;
+rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}${match.customer ? " · " + match.customer : ""}</span>`;
 const currency = match.currency || "USD";
 const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
 const minCharge = Number(match.minCharge)||0;
