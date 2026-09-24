@@ -277,6 +277,8 @@ let SELECTED_RAIL_EQ = "COMPARE";  // rail always compares Boxcar vs Centerbeam
 let SELECTED_TRUCK_EQ = "STANDARD";  // STANDARD (dry van etc.) | BTRAIN
 let BTRAIN_ORIGINS = new Set();  // truck origins that actually have B-Train rates (Englehart / Earlton)
 let ECA = {};  // "CITY,STATE" (GP mill) -> [ {name,city,state,postal,country}, ... ] competitor linkages
+let ECA_RATES = [];  // competitor destination lane rates (rail-shaped) from Rate Update Work
+let ECA_RATE_INDEX = {};  // "OCITY,OST|DCITY,DST" -> [{name, flat, currency, railroad, stcc, gpPlant, origLoc, destLoc}, ...]
 
 const RAIL_ORIGIN_LABELS = {
 "ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
@@ -423,6 +425,28 @@ RAIL_DEST_CITIES = data.rail_dest_cities || [];
 BTRAIN_DEST_CITIES = data.btrain_dest_cities || [];
 BTRAIN_ORIGINS = new Set(RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip) && r.origLoc).map(r=>r.origLoc));
 ECA = data.eca || {};
+ECA_RATES = data.eca_rates || [];
+ECA_RATE_INDEX = {};
+for(const raw of ECA_RATES){
+  if(!Array.isArray(raw) || raw.length < 13) continue;
+  const oParts = String(raw[9]||"").split(",");
+  const dParts = String(raw[12]||"").split(",");
+  if(oParts.length < 2 || dParts.length < 2) continue;
+  const k = oParts[0].trim().toUpperCase()+","+oParts[1].trim().toUpperCase()
+          +"|"+dParts[0].trim().toUpperCase()+","+dParts[1].trim().toUpperCase();
+  const entry = {
+    name: String(raw[18]||"").trim(),
+    flat: Number(raw[3]) || 0,
+    currency: raw[4] || "USD",
+    railroad: String(raw[16]||"").trim(),
+    stcc: String(raw[17]||"").trim(),
+    gpPlant: String(raw[19]||"").trim(),
+    origLoc: raw[9],
+    destLoc: raw[12],
+  };
+  if(!entry.name || !(entry.flat > 0)) continue;
+  (ECA_RATE_INDEX[k] = ECA_RATE_INDEX[k] || []).push(entry);
+}
 ORIGIN_BUSINESS = data.origin_business || {};
 ORIGIN_DIVISION = data.origin_division || {};
 buildUI();
@@ -430,11 +454,13 @@ buildBusinessFilterOptions();
 const btrainCount = RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip)).length;
 const truckCount = RATES.filter(r=>r.mode==="TRUCK").length - btrainCount;
 const railCount = RATES.filter(r=>r.mode==="RAIL").length;
+const ecaLaneCount = Object.keys(ECA_RATE_INDEX).length;
 document.getElementById("dataStatus").textContent =
 RATES.length.toLocaleString()+" rates loaded (" +
 truckCount.toLocaleString() + " truck, " +
 railCount.toLocaleString() + " rail, " +
-btrainCount.toLocaleString() + " B-Train)";
+btrainCount.toLocaleString() + " B-Train" +
+(ecaLaneCount ? ", " + ecaLaneCount.toLocaleString() + " ECA lanes" : "") + ")";
 loadGoogleMapsJS().then(()=>initDestinationAutocomplete()).catch(()=>{});
 }catch(e){
 document.getElementById("appContainer").innerHTML =
@@ -1234,64 +1260,106 @@ if(!card || !content) return;
 
 const isMI = match && (match.uom||"").toString().toUpperCase() === "MI";
 const isRail = !!match && match.mode === "RAIL";
-// Rail yardstick: GP flat lane total expressed as an implied per-mile rate.
 const railFlat = isRail ? (Number(match.flat) || 0) : 0;
 const railRPM = (isRail && miles != null && miles > 0 && railFlat > 0) ? (railFlat / miles) : null;
-const eligible = !!match && (
-(SELECTED_MODE === "TRUCK" && !isBTrainEquip(match.equip) && isMI) ||
-(SELECTED_MODE === "RAIL" && railRPM != null)
-);
 const key = (originFac||"").split(",").slice(0,2).join(",");
-const comps = (eligible && ECA[key]) ? ECA[key] : null;
+const comps = ECA[key] || null;
 if(!comps || !comps.length){ card.style.display = "none"; return; }
 
-const myQuery = window._lastQuery;  // identity token to drop stale async results
-const rate = Number(match.rate) || 0;
-const minCharge = Number(match.minCharge) || 0;
-const cur = match.currency || "USD";
-const gpTotal = isRail ? railFlat : _gpTotalForCompare(match, miles);
+const destCityU = (destCity||"").toString().trim().toUpperCase();
+const destStateU = (destState||"").toString().trim().toUpperCase();
+const canEstimate = !!match && (
+  (SELECTED_MODE === "TRUCK" && !isBTrainEquip(match.equip) && isMI) ||
+  (SELECTED_MODE === "RAIL" && railRPM != null)
+);
 
-vsGp.textContent = "vs GP " + fmt(gpTotal, cur);
-content.innerHTML = `<div class="eca-loading">Estimating ${comps.length} competitor${comps.length>1?"s":""}…</div>`;
+// Prefer actual RUW competitor lane rates for this destination (rail).
+const actualByName = {};
+if(SELECTED_MODE === "RAIL" && destCityU && destStateU){
+  for(const c of comps){
+    const ck = (c.city||"").toUpperCase()+","+(c.state||"").toUpperCase()+"|"+destCityU+","+destStateU;
+    const lanes = ECA_RATE_INDEX[ck];
+    if(!lanes || !lanes.length) continue;
+    const named = lanes.filter(l => l.name && c.name && l.name.toUpperCase() === String(c.name).toUpperCase());
+    if(!named.length) continue;
+    actualByName[c.name] = named.reduce((a,b)=> a.flat <= b.flat ? a : b);
+  }
+}
+const hasActual = Object.keys(actualByName).length > 0;
+if(!hasActual && !canEstimate){ card.style.display = "none"; return; }
+
+const myQuery = window._lastQuery;
+const rate = Number(match && match.rate) || 0;
+const minCharge = Number(match && match.minCharge) || 0;
+const cur = (match && match.currency) || "USD";
+const gpTotal = isRail ? railFlat : (match ? _gpTotalForCompare(match, miles) : 0);
+
+vsGp.textContent = gpTotal > 0 ? ("vs GP " + fmt(gpTotal, cur)) : "";
+const nActual = Object.keys(actualByName).length;
+content.innerHTML = '<div class="eca-loading">'+(hasActual ? "Loading" : "Estimating")+" "+comps.length+" competitor"+(comps.length>1?"s":"")+(nActual ? " ("+nActual+" quoted)" : "")+"…</div>";
 card.style.display = "block";
 
 const destStr = buildDestString(destZip, destCity, destState);
 const milesArr = await getMileageMatrix(comps.map(_ecaOriginStr), destStr);
-if(window._lastQuery !== myQuery) return;  // a newer quote started; abandon
+if(window._lastQuery !== myQuery) return;
 
 let noRoute = 0;
 const rows = [];
 comps.forEach((c, i) => {
-const cm = milesArr[i];
-if(cm == null){ noRoute++; return; }
-// Rail is all-in (fuel included); truck adds 25% fuel on top of per-mile line-haul.
-const est = isRail
-? (railRPM * cm)
-: (Math.max(rate * cm, minCharge) + (rate * cm * 0.25));
-rows.push({ name:c.name, loc:`${_titleCase(c.city)}, ${c.state}`, miles:cm, est, delta: est - gpTotal });
+  const cm = milesArr[i];
+  const actual = actualByName[c.name];
+  if(actual){
+    const est = actual.flat;
+    rows.push({
+      name: c.name,
+      loc: _titleCase(c.city)+", "+c.state,
+      miles: cm,
+      est,
+      delta: gpTotal > 0 ? (est - gpTotal) : 0,
+      quoted: true,
+      railroad: actual.railroad || "",
+    });
+    return;
+  }
+  if(!canEstimate){ return; }
+  if(cm == null){ noRoute++; return; }
+  const est = isRail
+    ? (railRPM * cm)
+    : (Math.max(rate * cm, minCharge) + (rate * cm * 0.25));
+  rows.push({ name:c.name, loc:_titleCase(c.city)+", "+c.state, miles:cm, est, delta: est - gpTotal, quoted:false, railroad:"" });
 });
 
 if(!rows.length){
-content.innerHTML = `<div class="eca-loading">No competitor mileage available for this destination.</div>`;
-return;
+  content.innerHTML = '<div class="eca-loading">No competitor rates or mileage available for this destination.</div>';
+  return;
 }
 
 rows.sort((a,b)=> a.est - b.est);
 const renderRow = (r)=>{
-const cls = r.delta < -0.5 ? "eca-neg" : (r.delta > 0.5 ? "eca-pos" : "");
-const dot = r.delta < -0.5 ? "🔴 " : (r.delta > 0.5 ? "🟢 " : "");
-const sign = r.delta < 0 ? "−" : "+";
-return `<tr><td>${r.name}</td><td class="eca-loc">${r.loc}</td><td class="mono" style="text-align:right;">${r.miles}</td><td class="mono" style="text-align:right;">${fmt(r.est, cur)}</td><td class="mono ${cls}" style="text-align:right;">${dot}${sign}${fmt(Math.abs(r.delta), cur)}</td></tr>`;
+  const cls = r.delta < -0.5 ? "eca-neg" : (r.delta > 0.5 ? "eca-pos" : "");
+  const dot = r.delta < -0.5 ? "🔴 " : (r.delta > 0.5 ? "🟢 " : "");
+  const sign = r.delta < 0 ? "−" : "+";
+  const milesCell = r.miles != null ? r.miles : "—";
+  const badge = r.quoted ? ' <span style="font-size:10px;color:var(--text-muted);font-weight:600;">(quoted)</span>' : "";
+  const deltaCell = gpTotal > 0
+    ? (dot+sign+fmt(Math.abs(r.delta), cur))
+    : "—";
+  return "<tr><td>"+r.name+badge+'</td><td class="eca-loc">'+r.loc+'</td><td class="mono" style="text-align:right;">'+milesCell+'</td><td class="mono" style="text-align:right;">'+fmt(r.est, cur)+'</td><td class="mono '+cls+'" style="text-align:right;">'+deltaCell+"</td></tr>";
 };
-const head = `<tr><th>Competitor</th><th>Location</th><th style="text-align:right;">Miles</th><th style="text-align:right;">Est. Total</th><th style="text-align:right;">&Delta; vs GP</th></tr>`;
+const head = '<tr><th>Competitor</th><th>Location</th><th style="text-align:right;">Miles</th><th style="text-align:right;">Total</th><th style="text-align:right;">&Delta; vs GP</th></tr>';
 const TOPN = 5;
 const top = rows.slice(0, TOPN).map(renderRow).join("");
 const rest = rows.slice(TOPN).map(renderRow).join("");
-const noteRoute = noRoute ? `<div class="eca-note">${noRoute} competitor${noRoute>1?"s":""} had no drivable route and were skipped.</div>` : "";
-const noteMethod = isRail
-? `<div class="eca-note">Rail estimate uses GP's implied ${fmt(railRPM, cur)}/mi (lane total ÷ ${miles} mi) applied to each competitor's distance — fuel included.</div>`
-: "";
-content.innerHTML = `<table class="eca-table"><thead>${head}</thead><tbody>${top}</tbody>${rest ? `<tbody id="ecaRest" style="display:none;">${rest}</tbody>` : ""}</table>${rest ? `<button class="eca-toggle" onclick="toggleEcaShowAll(this)">Show all ${rows.length}</button>` : ""}${noteMethod}${noteRoute}`;
+const nQuoted = rows.filter(r=>r.quoted).length;
+const nEst = rows.length - nQuoted;
+const noteRoute = noRoute ? '<div class="eca-note">'+noRoute+" competitor"+(noRoute>1?"s":"")+" had no drivable route and were skipped.</div>" : "";
+let noteMethod = "";
+if(nQuoted){
+  noteMethod = '<div class="eca-note">'+nQuoted+" competitor lane"+(nQuoted>1?"s":"")+" from Rate Update Work (ECA Rail Rates)."+(nEst ? " "+nEst+" other"+(nEst>1?"s":"")+" estimated from GP $/mi × competitor miles." : "")+"</div>";
+}else if(isRail){
+  noteMethod = '<div class="eca-note">Rail estimate uses GP\'s implied '+fmt(railRPM, cur)+"/mi (lane total ÷ "+miles+" mi) applied to each competitor's distance — fuel included.</div>";
+}
+content.innerHTML = '<table class="eca-table"><thead>'+head+"</thead><tbody>"+top+"</tbody>"+(rest ? '<tbody id="ecaRest" style="display:none;">'+rest+"</tbody>" : "")+"</table>"+(rest ? '<button class="eca-toggle" onclick="toggleEcaShowAll(this)">Show all '+rows.length+"</button>" : "")+noteMethod+noteRoute;
 }
 
 function toggleEcaShowAll(btn){
