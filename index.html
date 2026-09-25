@@ -38,7 +38,11 @@ background:#fef2f2;border-left:3px solid var(--error);color:var(--error);
 padding:10px 16px;font-size:13px;font-weight:500;margin-bottom:16px;border-radius:4px;display:none;
 }
 .error-banner.show{display:block;}
-.form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:"biz mode cust" "week . ship";gap:14px;margin-bottom:16px;align-items:start;}
+.fg-biz{grid-area:biz;} .fg-mode{grid-area:mode;} .fg-cust{grid-area:cust;} .fg-week{grid-area:week;} .fg-ship{grid-area:ship;}
+@media (max-width:640px){
+.form-grid{grid-template-columns:1fr;grid-template-areas:"biz" "mode" "cust" "ship" "week";}
+}
 .form-row-5{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px;margin-bottom:16px;}
 .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
 .field{display:flex;flex-direction:column;gap:5px;}
@@ -250,7 +254,6 @@ text-align:center;
 .rail-route-block .truck-rail-label{display:block;font-size:13px;margin-bottom:3px;}
 .rail-route-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);word-break:break-word;line-height:1.5;}
 /* Ship-To / Party ID lookup (under the Customer dropdown) */
-.shipto-label{margin-top:8px;}
 .shipto-msg{font-size:11px;line-height:1.35;min-height:0;color:var(--text-muted);}
 .shipto-msg.hit{color:#15803d;}
 .shipto-msg.miss{color:var(--error);font-weight:600;}
@@ -279,7 +282,7 @@ let currentMatch = null;
 let currentCompareMatches = null;
 let SELECTED_CUSTOMER = "";
 let SELECTED_MODE = "TRUCK";
-let SELECTED_RAIL_EQ = "COMPARE";  // rail always compares Boxcar vs Centerbeam
+const SELECTED_RAIL_EQ = "COMPARE";  // rail always compares Boxcar vs Centerbeam (no selector)
 let SELECTED_TRUCK_EQ = "STANDARD";  // STANDARD (dry van etc.) | BTRAIN
 let BTRAIN_ORIGINS = new Set();  // truck origins that actually have B-Train rates (Englehart / Earlton)
 let ECA = {};  // "CITY,STATE" (GP mill) -> [ {name,city,state,postal,country}, ... ] competitor linkages
@@ -485,34 +488,36 @@ document.getElementById("appContainer").innerHTML = `
 <div class="card">
 <div class="card-body">
 <div class="form-grid">
-<div class="field">
+<div class="field fg-biz">
 <label>Business Unit</label>
 <select id="businessFilter" onchange="onBusinessFilterChange()">
 <option value="ALL">All</option>
 </select>
 </div>
-<div class="field" style="align-items:flex-start;">
+<div class="field fg-mode" style="align-items:flex-start;">
 <label>Equipment Mode</label>
 <div class="seg">
 <button id="modeTruck" class="${SELECTED_MODE==="TRUCK"?"active":""}" onclick="setMode('TRUCK')">🚚 Truck</button>
 <button id="modeRail" class="${SELECTED_MODE==="RAIL"?"active":""}" onclick="setMode('RAIL')">🚂 Rail</button>
 </div>
 </div>
-<div class="field">
+<div class="field fg-cust">
 <label for="customerFilter">Customer</label>
 <select id="customerFilter" onchange="onCustomerChange()">
 <option value="">General rates</option>
 <option value="LOWES">Lowe's</option>
 <option value="HOME DEPOT">Home Depot</option>
 </select>
-<label for="shipToId" class="shipto-label">Ship-To / Party ID</label>
+</div>
+<div class="field fg-week">
+<label for="weekOf">Week Of</label>
+<input type="date" id="weekOf" value="${new Date().toISOString().slice(0,10)}">
+</div>
+<div class="field fg-ship">
+<label for="shipToId">Ship-To / Party ID</label>
 <input type="text" id="shipToId" list="shipToList" autocomplete="off" spellcheck="false" placeholder="e.g. 250019326 or PL7L11" title="Type a Ship-To / Party ID and press Enter to fill the destination">
 <datalist id="shipToList"></datalist>
 <div class="shipto-msg" id="shipToMsg" aria-live="polite"></div>
-</div>
-<div class="field">
-<label>Week Of</label>
-<input type="date" id="weekOf" value="${new Date().toISOString().slice(0,10)}">
 </div>
 </div>
 <div class="error-banner" id="errorBanner">
@@ -554,12 +559,6 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <input type="text" id="destZip" placeholder="e.g. 30303">
 <div class="zip-hint" id="zipHint" style="display:none;">Select a ZIP suggestion (or type one).</div>
 </div>
-</div>
-<div class="field" id="railEquipWrap" style="display:${SELECTED_MODE==="RAIL" ? "block":"none"}; margin-bottom:16px;">
-<label>Rail Equipment</label>
-<select id="railEquip" onchange="onRailEquipChange()">
-<option value="COMPARE">Compare Both</option>
-</select>
 </div>
 <div class="field" id="truckEquipWrap" style="display:none; margin-bottom:16px;">
 <label>Truck Equipment</label>
@@ -773,21 +772,13 @@ _setShipToMsg("", ""); SHIP_TO_APPLIED = null;
 
 function setMode(mode){
 SELECTED_MODE = mode;
-SELECTED_RAIL_EQ = (mode === "RAIL") ? "COMPARE" : "ALL";
 if(mode !== "TRUCK") SELECTED_TRUCK_EQ = "STANDARD";
 document.getElementById("modeTruck")?.classList.toggle("active", mode==="TRUCK");
 document.getElementById("modeRail")?.classList.toggle("active", mode==="RAIL");
-const wrap = document.getElementById("railEquipWrap");
-if(wrap) wrap.style.display = (mode==="RAIL") ? "block" : "none";
 refreshOriginOptions();
 rebuildTruckEquipOptions();   // shows B-Train only for B-Train origins, in Truck mode
 clearResultsOnly();
 reapplyShipToForMode();
-}
-
-function onRailEquipChange(){
-SELECTED_RAIL_EQ = document.getElementById("railEquip")?.value || "ALL";
-clearResultsOnly();
 }
 
 function onTruckEquipChange(){
