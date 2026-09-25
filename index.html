@@ -249,6 +249,12 @@ text-align:center;
 .rail-route-block{padding:6px 0;border-bottom:1px solid var(--border);}
 .rail-route-block .truck-rail-label{display:block;font-size:13px;margin-bottom:3px;}
 .rail-route-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);word-break:break-word;line-height:1.5;}
+/* Ship-To / Party ID lookup (under the Customer dropdown) */
+.shipto-label{margin-top:8px;}
+.shipto-msg{font-size:11px;line-height:1.35;min-height:0;color:var(--text-muted);}
+.shipto-msg.hit{color:#15803d;}
+.shipto-msg.miss{color:var(--error);font-weight:600;}
+.shipto-msg .shipto-note{color:var(--text-muted);font-style:italic;}
 </style>
 </head>
 <body>
@@ -279,6 +285,8 @@ let BTRAIN_ORIGINS = new Set();  // truck origins that actually have B-Train rat
 let ECA = {};  // "CITY,STATE" (GP mill) -> [ {name,city,state,postal,country}, ... ] competitor linkages
 let ECA_RATES = [];  // competitor destination lane rates (rail-shaped) from Rate Update Work
 let ECA_RATE_INDEX = {};  // "OCITY,OST|DCITY,DST" -> [{name, flat, currency, railroad, stcc, gpPlant, origLoc, destLoc}, ...]
+let SHIP_TO = {};  // normalized Ship-To / Party ID -> {name, city, state, zip, country, customer, src, rail?, n?, last?}
+let SHIP_TO_APPLIED = null;  // {id, entry, city, state, setCustomer} for the last successful lookup
 
 const RAIL_ORIGIN_LABELS = {
 "ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
@@ -449,6 +457,7 @@ for(const raw of ECA_RATES){
 }
 ORIGIN_BUSINESS = data.origin_business || {};
 ORIGIN_DIVISION = data.origin_division || {};
+SHIP_TO = data.ship_to || {};
 buildUI();
 buildBusinessFilterOptions();
 const btrainCount = RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip)).length;
@@ -496,6 +505,10 @@ document.getElementById("appContainer").innerHTML = `
 <option value="LOWES">Lowe's</option>
 <option value="HOME DEPOT">Home Depot</option>
 </select>
+<label for="shipToId" class="shipto-label">Ship-To / Party ID</label>
+<input type="text" id="shipToId" list="shipToList" autocomplete="off" spellcheck="false" placeholder="e.g. 250019326 or PL7L11" title="Type a Ship-To / Party ID and press Enter to fill the destination">
+<datalist id="shipToList"></datalist>
+<div class="shipto-msg" id="shipToMsg" aria-live="polite"></div>
 </div>
 <div class="field">
 <label>Week Of</label>
@@ -587,6 +600,7 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 </div>`;
 refreshOriginOptions();
 rebuildTruckEquipOptions();
+initShipToLookup();
 const zipInput = document.getElementById("destZip");
 zipInput?.addEventListener("focus", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
 zipInput?.addEventListener("click", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicker(LAST_DEST_ZIPS, LAST_DEST_CITY, LAST_DEST_STATE); });
@@ -615,6 +629,148 @@ function customerMatches(r){
 return !r.customer || r.customer === SELECTED_CUSTOMER;
 }
 
+// ---- Ship-To / Party ID lookup ----
+// Keys in rates.json "ship_to" are normalized the same way (build_ship_to.py
+// norm_id): no spaces, uppercase, Excel ".0" tail dropped, leading zeros
+// stripped, so "0250019326" and "250019326" both match.
+function normShipToId(v){
+let s = String(v == null ? "" : v).replace(/\s+/g, "").toUpperCase();
+if(/^\d+\.0+$/.test(s)) s = s.split(".")[0];
+return s.replace(/^0+/, "");
+}
+// Returns [key, entry] or null. Accepts pasted text like "250019326 - NAME"
+// (first token is used) and a bare consignment plant code ("7L11" -> "PL7L11").
+function lookupShipTo(raw){
+const text = String(raw == null ? "" : raw).trim();
+if(!text) return null;
+const tries = [];
+const whole = normShipToId(text);
+if(whole) tries.push(whole);
+const tok = (text.match(/[A-Za-z0-9]+/) || [""])[0];
+const tokN = normShipToId(tok);
+if(tokN && tokN !== whole) tries.push(tokN);
+for(const k of tries.slice()){
+if(/^\d[A-Z]\d{2}$/.test(k)) tries.push("PL" + k);
+}
+for(const k of tries){
+if(Object.prototype.hasOwnProperty.call(SHIP_TO, k)) return [k, SHIP_TO[k]];
+}
+return null;
+}
+// Destination city/state for the current mode (DCs with a separate rail ramp
+// use it in Rail mode, e.g. Lowe's Henderson CO -> Rolla CO).
+function shipToDest(e){
+if(SELECTED_MODE === "RAIL" && e.rail && e.rail.city && e.rail.state) return { city:e.rail.city, state:e.rail.state, rail:true };
+return { city:e.city || "", state:e.state || "", rail:false };
+}
+function _setShipToMsg(kind, text, note){
+const msg = document.getElementById("shipToMsg");
+if(!msg) return;
+msg.className = "shipto-msg" + (kind ? " " + kind : "");
+msg.textContent = text || "";
+if(note){
+const sp = document.createElement("span");
+sp.className = "shipto-note";
+sp.textContent = " " + note;
+msg.appendChild(sp);
+}
+}
+// Fill the destination exactly like picking a destination from the list
+// (city + state, zip cleared/set, pickers closed); Submit then runs Google
+// mileage + rate matching as usual.
+function _fillDestFromShipTo(e){
+const d = shipToDest(e);
+const cityEl = document.getElementById("destCity");
+const stateEl = document.getElementById("destState");
+const zipEl = document.getElementById("destZip");
+hideDestPicker();
+hideZipPicker();
+const changed = !cityEl || cityEl.value.trim().toUpperCase() !== d.city || (stateEl && stateEl.value.trim().toUpperCase() !== d.state) || (zipEl && zipEl.value.trim() !== (e.zip || ""));
+if(cityEl) cityEl.value = d.city;
+if(stateEl) stateEl.value = d.state;
+if(zipEl) zipEl.value = e.zip || "";
+LAST_DEST_CITY = d.city;
+LAST_DEST_STATE = d.state;
+LAST_DEST_ZIPS = [];
+document.getElementById("errorBanner")?.classList.remove("show");
+if(changed) clearResultsOnly();
+return d;
+}
+function applyShipTo(){
+const input = document.getElementById("shipToId");
+if(!input) return;
+const raw = input.value;
+if(!raw.trim()){
+_setShipToMsg("", "");
+SHIP_TO_APPLIED = null;
+return;
+}
+const hit = lookupShipTo(raw);
+if(!hit){
+SHIP_TO_APPLIED = null;
+_setShipToMsg("miss", "Ship-To ID \u201c" + raw.trim() + "\u201d not found.", Object.keys(SHIP_TO).length ? "" : "(Ship-To list not loaded)");
+return;
+}
+const [id, e] = hit;
+const sel = document.getElementById("customerFilter");
+let setCustomer = false;
+if(sel){
+const hasOpt = e.customer && Array.from(sel.options).some(o => o.value === e.customer);
+if(hasOpt){
+setCustomer = true;
+if(sel.value !== e.customer){ sel.value = e.customer; onCustomerChange(); }
+}else if(SHIP_TO_APPLIED && SHIP_TO_APPLIED.setCustomer && sel.value){
+// The previous lookup picked Lowe's/Home Depot; this ID isn't theirs.
+sel.value = ""; onCustomerChange();
+}
+}
+const d = _fillDestFromShipTo(e);
+SHIP_TO_APPLIED = { id, entry:e, city:d.city, state:d.state, setCustomer };
+if(input.value.trim().toUpperCase() !== id) input.value = id;
+const where = d.city + ", " + d.state + (e.zip ? " " + e.zip : "");
+const notes = [];
+if(d.rail) notes.push("(rail ramp; truck: " + e.city + ", " + e.state + ")");
+if(e.n > 1) notes.push("(" + e.n + " addresses on file \u2013 using most frequent/recent)");
+_setShipToMsg("hit", "\u2713 " + (e.name || id) + " \u2014 " + where, notes.join(" "));
+}
+// Mode switch: if the destination still shows what the lookup filled, re-fill
+// it for the new mode (only matters for DCs with a separate rail ramp).
+function reapplyShipToForMode(){
+const a = SHIP_TO_APPLIED;
+if(!a || !a.entry.rail) return;
+const cityEl = document.getElementById("destCity");
+const stateEl = document.getElementById("destState");
+if(!cityEl || !stateEl) return;
+if(cityEl.value.trim().toUpperCase() !== a.city || stateEl.value.trim().toUpperCase() !== a.state) return;
+applyShipTo();
+}
+function initShipToLookup(){
+const input = document.getElementById("shipToId");
+const list = document.getElementById("shipToList");
+if(!input) return;
+if(list){
+// Datalist autocomplete (IDs + name/city). Built with DOM APIs, not HTML strings.
+const frag = document.createDocumentFragment();
+for(const [k, e] of Object.entries(SHIP_TO)){
+const o = document.createElement("option");
+o.value = k;
+o.label = (e.name || "") + " \u2014 " + (e.city || "") + ", " + (e.state || "");
+frag.appendChild(o);
+}
+list.replaceChildren(frag);
+}
+input.addEventListener("keydown", (ev)=>{ if(ev.key === "Enter"){ ev.preventDefault(); applyShipTo(); } });
+input.addEventListener("change", applyShipTo);  // blur after an edit, or a datalist pick
+input.addEventListener("input", (ev)=>{
+// Datalist selection fires "input" without a normal keystroke type.
+if(!ev.inputType || ev.inputType === "insertReplacementText"){
+if(lookupShipTo(input.value)) applyShipTo();
+}else if(!input.value.trim()){
+_setShipToMsg("", ""); SHIP_TO_APPLIED = null;
+}
+});
+}
+
 function setMode(mode){
 SELECTED_MODE = mode;
 SELECTED_RAIL_EQ = (mode === "RAIL") ? "COMPARE" : "ALL";
@@ -626,6 +782,7 @@ if(wrap) wrap.style.display = (mode==="RAIL") ? "block" : "none";
 refreshOriginOptions();
 rebuildTruckEquipOptions();   // shows B-Train only for B-Train origins, in Truck mode
 clearResultsOnly();
+reapplyShipToForMode();
 }
 
 function onRailEquipChange(){
@@ -1841,6 +1998,13 @@ document.getElementById("destState").value = "";
 document.getElementById("destZip").value = "";
 document.getElementById("pctAdj").value = 0;
 document.getElementById("errorBanner")?.classList.remove("show");
+const _sti = document.getElementById("shipToId"); if(_sti) _sti.value = "";
+if(SHIP_TO_APPLIED && SHIP_TO_APPLIED.setCustomer){
+const _cf = document.getElementById("customerFilter");
+if(_cf && _cf.value){ _cf.value = ""; SELECTED_CUSTOMER = ""; }
+}
+SHIP_TO_APPLIED = null;
+_setShipToMsg("", "");
 LAST_DEST_ZIPS = [];
 hideZipPicker();
 clearResultsOnly();
