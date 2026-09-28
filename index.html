@@ -38,10 +38,12 @@ background:#fef2f2;border-left:3px solid var(--error);color:var(--error);
 padding:10px 16px;font-size:13px;font-weight:500;margin-bottom:16px;border-radius:4px;display:none;
 }
 .error-banner.show{display:block;}
-.form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:"biz mode cust" "week . ship";gap:14px;margin-bottom:16px;align-items:start;}
-.fg-biz{grid-area:biz;} .fg-mode{grid-area:mode;} .fg-cust{grid-area:cust;} .fg-week{grid-area:week;} .fg-ship{grid-area:ship;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:"biz mode cust" "week route ship";gap:14px;margin-bottom:16px;align-items:start;}
+.fg-biz{grid-area:biz;} .fg-mode{grid-area:mode;} .fg-cust{grid-area:cust;} .fg-week{grid-area:week;} .fg-ship{grid-area:ship;} .fg-route{grid-area:route;min-width:0;}
+.fg-route[hidden]{display:none;}
 @media (max-width:640px){
 .form-grid{grid-template-columns:1fr;grid-template-areas:"biz" "mode" "cust" "ship" "week";}
+.form-grid.is-rail{grid-template-areas:"biz" "mode" "cust" "ship" "route" "week";}
 }
 .form-row-5{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px;margin-bottom:16px;}
 .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
@@ -253,6 +255,24 @@ text-align:center;
 .rail-route-block{padding:6px 0;border-bottom:1px solid var(--border);}
 .rail-route-block .truck-rail-label{display:block;font-size:13px;margin-bottom:3px;}
 .rail-route-val{font-family:'DM Mono',monospace;font-size:12px;color:var(--text);word-break:break-word;line-height:1.5;}
+/* Rail Route picker (form row 2, col 2) + "Routes on file" panel in rail results */
+.fg-route select{text-overflow:ellipsis;}
+.rail-routes{margin:0 24px 20px;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;overflow-x:auto;background:#fff;}
+.rail-routes-title{padding:10px 14px;font-size:11px;font-weight:700;color:var(--label);text-transform:uppercase;letter-spacing:.07em;background:var(--input-bg);border-bottom:1.5px solid var(--border);}
+.rail-routes-title span{font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-muted);}
+table.rail-routes-table thead th{padding:7px 12px;font-size:10.5px;}
+table.rail-routes-table tbody td{padding:7px 12px;font-size:12.5px;}
+table.rail-routes-table th:nth-child(-n+3),table.rail-routes-table td:nth-child(-n+3){text-align:left;}
+table.rail-routes-table td.rr-route{font-family:'DM Mono',monospace;font-size:12px;word-break:break-word;}
+table.rail-routes-table tbody tr{cursor:pointer;}
+table.rail-routes-table tbody tr.rr-sel{background:#ecfdf5;}
+table.rail-routes-table tbody tr.rr-sel td:first-child{box-shadow:inset 3px 0 0 #16a34a;}
+.rail-route-note{margin:0 24px 12px;font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;}
+@media (max-width:640px){
+.rail-routes{margin:0 12px 16px;}
+.rail-route-note{margin:0 12px 12px;}
+table.rail-routes-table thead th,table.rail-routes-table tbody td{padding:6px 8px;}
+}
 /* Ship-To / Party ID lookup (under the Customer dropdown) */
 .shipto-msg{font-size:11px;line-height:1.35;min-height:0;color:var(--text-muted);}
 .shipto-msg.hit{color:#15803d;}
@@ -290,6 +310,9 @@ let ECA_RATES = [];  // competitor destination lane rates (rail-shaped) from Rat
 let ECA_RATE_INDEX = {};  // "OCITY,OST|DCITY,DST" -> [{name, flat, currency, railroad, stcc, gpPlant, origLoc, destLoc}, ...]
 let SHIP_TO = {};  // normalized Ship-To / Party ID -> {name, city, state, zip, country, customer, src, rail?, n?, last?}
 let SHIP_TO_APPLIED = null;  // {id, entry, city, state, setCustomer} for the last successful lookup
+// Rail Route picker: distinct routes (TotalRoute + destination serving railroad)
+// on file for the current origin/destination lane. selected "" = cheapest (default).
+let RAIL_ROUTE = { lane:"", options:[], selected:"" };
 
 const RAIL_ORIGIN_LABELS = {
 "ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
@@ -399,6 +422,7 @@ destCountry: r[15],
 route: r[16] || "",
 carrierSplit: r[17] || "",
 customer: r[18] || "",
+destRR: r[19] || "",   // rail: destination serving railroad (KBX DRR)
 };
 }
 return {
@@ -513,6 +537,13 @@ document.getElementById("appContainer").innerHTML = `
 <label for="weekOf">Week Of</label>
 <input type="date" id="weekOf" value="${new Date().toISOString().slice(0,10)}">
 </div>
+<div class="field fg-route" id="railRouteWrap" hidden>
+<label for="railRoute">Route</label>
+<select id="railRoute" onchange="onRailRouteChange()" disabled title="Rail routes on file for this lane (cheapest first)">
+<option value="">Enter origin + destination</option>
+</select>
+<div class="shipto-msg" id="railRouteMsg" aria-live="polite"></div>
+</div>
 <div class="field fg-ship">
 <label for="shipToId">Ship-To / Party ID</label>
 <input type="text" id="shipToId" list="shipToList" autocomplete="off" spellcheck="false" placeholder="e.g. 250019326 or PL7L11" title="Type a Ship-To / Party ID and press Enter to fill the destination">
@@ -608,6 +639,13 @@ zipInput?.addEventListener("click", ()=>{ if(LAST_DEST_ZIPS.length) showZipPicke
 const cityInput = document.getElementById("destCity");
 cityInput?.addEventListener("input", onDestCityInput);
 cityInput?.addEventListener("focus", onDestCityInput);
+// Keep the rail Route list in sync with the lane being typed/picked.
+for(const id of ["destCity","destState","destZip"]){
+const el = document.getElementById(id);
+el?.addEventListener("input", scheduleRailRouteRefresh);
+el?.addEventListener("change", scheduleRailRouteRefresh);
+}
+refreshRailRouteOptions();
 
 document.addEventListener("click",(e)=>{
 const zp = document.getElementById("zipPicker");
@@ -693,6 +731,7 @@ LAST_DEST_STATE = d.state;
 LAST_DEST_ZIPS = [];
 document.getElementById("errorBanner")?.classList.remove("show");
 if(changed) clearResultsOnly();
+refreshRailRouteOptions();
 return d;
 }
 function applyShipTo(){
@@ -918,6 +957,7 @@ document.getElementById("originCity").value="";
 document.getElementById("originState").value="";
 document.getElementById("originZip").value="";
 updateOriginBadge();
+refreshRailRouteOptions();
 }
 
 function getOriginsForMode(mode){
@@ -944,6 +984,7 @@ document.getElementById("originState").value="";
 document.getElementById("originZip").value="";
 rebuildTruckEquipOptions();
 updateOriginBadge();
+refreshRailRouteOptions();
 return;
 }
 const parts = val.split(",");
@@ -952,6 +993,7 @@ document.getElementById("originState").value = (parts[1]||"").trim();
 document.getElementById("originZip").value = ORIGIN_ZIPS[val] || "";
 rebuildTruckEquipOptions();
 updateOriginBadge();
+refreshRailRouteOptions();
 }
 
 let _destAutocomplete = null;
@@ -1049,6 +1091,7 @@ async function _selectDestItem(item){
     if(stateEl) stateEl.value = item.state;
     LAST_DEST_CITY = item.city;
     LAST_DEST_STATE = item.state;
+    refreshRailRouteOptions();
     return;
   }
 
@@ -1068,6 +1111,7 @@ async function _selectDestItem(item){
     if(state) stateEl.value = state;
     LAST_DEST_CITY = city;
     LAST_DEST_STATE = state;
+    refreshRailRouteOptions();
 
     const loc = place.location;
     const _latNum = (loc && typeof loc.lat === "function") ? loc.lat() : (loc ? loc.lat : null);
@@ -1187,6 +1231,7 @@ if(stateEl) stateEl.value = state;
 LAST_DEST_CITY = city;
 LAST_DEST_STATE = state;
 hideRailCityPicker();
+refreshRailRouteOptions();
 cityInput.focus();
 });
 document.body.appendChild(picker);
@@ -1287,20 +1332,160 @@ btn.disabled = false;
 window._lastQuery = { originFac, destCity, destState, destZip };
 
 if(SELECTED_MODE === "RAIL" && SELECTED_RAIL_EQ === "COMPARE"){
-const boxcar = findRateByGroup(originFac, destCity, destState, destZip, "BOXCAR");
-const centerbeam = findRateByGroup(originFac, destCity, destState, destZip, "CENTERBEAM");
-displayCompareResults(boxcar, centerbeam, miles);
-// ECA yardstick = the cheaper available lane (what GP would most likely quote).
-const bcT = boxcar ? (Number(boxcar.flat)||Infinity) : Infinity;
-const cbT = centerbeam ? (Number(centerbeam.flat)||Infinity) : Infinity;
-const ecaMatch = (bcT <= cbT ? boxcar : centerbeam) || boxcar || centerbeam;
-renderEcaComparison(ecaMatch, originFac, destZip, destCity, destState, miles);
+refreshRailRouteOptions();
+runRailCompare(originFac, destCity, destState, destZip, miles);
 return;
 }
 
 const match = findRate(originFac, destCity, destState, destZip, miles);
 displayResults(match, miles);
 renderEcaComparison(match, originFac, destZip, destCity, destState, miles);
+}
+
+// Rail quote: Boxcar vs Centerbeam, optionally restricted to the route picked
+// in the Route dropdown (RAIL_ROUTE.selected; "" = cheapest per equipment,
+// i.e. the original behaviour).
+function runRailCompare(originFac, destCity, destState, destZip, miles){
+const key = RAIL_ROUTE.selected || "";
+const boxcar = findRateByGroup(originFac, destCity, destState, destZip, "BOXCAR", key);
+const centerbeam = findRateByGroup(originFac, destCity, destState, destZip, "CENTERBEAM", key);
+displayCompareResults(boxcar, centerbeam, miles);
+// ECA yardstick = the cheaper available lane (what GP would most likely quote).
+const bcT = boxcar ? (Number(boxcar.flat)||Infinity) : Infinity;
+const cbT = centerbeam ? (Number(centerbeam.flat)||Infinity) : Infinity;
+const ecaMatch = (bcT <= cbT ? boxcar : centerbeam) || boxcar || centerbeam;
+renderEcaComparison(ecaMatch, originFac, destZip, destCity, destState, miles);
+}
+
+// ---- Rail Route picker ----
+function railRouteKey(r){ return (r.route || "") + "|" + (r.destRR || ""); }
+function _escHtml(v){
+return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function _fmtShort(n, cur){
+if(n == null || isNaN(n)) return "\u2014";
+return Number.isInteger(Number(n)) ? (cur === "CAD" ? "C$" : "$") + Number(n).toLocaleString("en-US") : fmt(n, cur);
+}
+function railRouteLabel(o){
+const path = o.route ? _routeArrows(o.route) : "(route not listed)";
+return path + (o.destRR ? " \u00b7 " + o.destRR + "-served" : "");
+}
+// Lane key from the form (zip only matters when no city is given).
+function _railLaneFromForm(){
+const v = id => (document.getElementById(id)?.value || "").trim().toUpperCase();
+const q = { originFac:v("originFacility"), destCity:v("destCity"), destState:v("destState"), destZip:v("destZip") };
+const ready = !!q.originFac && ((q.destCity && q.destState) || !!q.destZip);
+q.lane = ready ? [q.originFac, q.destCity, q.destState, q.destCity ? "" : q.destZip].join("|") : "";
+return q;
+}
+// Distinct routes for a lane, each with its Boxcar / Centerbeam rate picked
+// exactly like findRateByGroup (best score, then equipment priority, then price).
+function getRailRouteOptions(originFac, destCity, destState, destZip){
+const groups = new Map();
+let top = -1;
+for(const r of RATES){
+if(r.mode !== "RAIL") continue;
+const grp = railEquipGroup(r.equip);
+if(grp !== "BOXCAR" && grp !== "CENTERBEAM") continue;
+const score = scoreRate(r, originFac, destCity, destState, destZip);
+if(score < 0) continue;
+if(score > top) top = score;
+const priority = grp === "BOXCAR" ? getBoxcarPriority(r.equip) : getCenterbeamPriority(r.equip);
+const price = Number(r.flat) || Infinity;
+const key = railRouteKey(r);
+let g = groups.get(key);
+if(!g){ g = { key, route:r.route || "", destRR:r.destRR || "", BOXCAR:null, CENTERBEAM:null }; groups.set(key, g); }
+const c = g[grp];
+if(!c || score > c.score || (score === c.score && priority < c.priority) || (score === c.score && priority === c.priority && price < c.price)){
+g[grp] = { score, priority, price, row:r };
+}
+}
+const opts = [];
+for(const g of groups.values()){
+const bc = (g.BOXCAR && g.BOXCAR.score === top) ? g.BOXCAR.row : null;
+const cb = (g.CENTERBEAM && g.CENTERBEAM.score === top) ? g.CENTERBEAM.row : null;
+if(!bc && !cb) continue;
+const bcT = bc ? (Number(bc.flat) || 0) : null;
+const cbT = cb ? (Number(cb.flat) || 0) : null;
+opts.push({ key:g.key, route:g.route, destRR:g.destRR, bc:bcT, cb:cbT, bcEquip:bc ? bc.equip : "", cbEquip:cb ? cb.equip : "",
+  currency:(bc || cb).currency || "USD", best:Math.min(bcT == null ? Infinity : bcT, cbT == null ? Infinity : cbT) });
+}
+opts.sort((a,b) => a.best - b.best || a.route.localeCompare(b.route) || a.destRR.localeCompare(b.destRR));
+return opts;
+}
+let _railRouteTimer = null;
+function scheduleRailRouteRefresh(){
+clearTimeout(_railRouteTimer);
+_railRouteTimer = setTimeout(refreshRailRouteOptions, 250);
+}
+function refreshRailRouteOptions(){
+const wrap = document.getElementById("railRouteWrap");
+const sel = document.getElementById("railRoute");
+const msg = document.getElementById("railRouteMsg");
+if(!wrap || !sel) return;
+const isRail = SELECTED_MODE === "RAIL";
+wrap.hidden = !isRail;
+document.querySelector(".form-grid")?.classList.toggle("is-rail", isRail);
+if(!isRail) return;
+const q = _railLaneFromForm();
+if(q.lane && q.lane === RAIL_ROUTE.lane) return;  // same lane: keep list + selection
+RAIL_ROUTE = { lane:q.lane, options:q.lane ? getRailRouteOptions(q.originFac, q.destCity, q.destState, q.destZip) : [], selected:"" };
+const opt = (value, text) => { const o = document.createElement("option"); o.value = value; o.textContent = text; return o; };
+const frag = document.createDocumentFragment();
+if(!q.lane){
+frag.appendChild(opt("", "Enter origin + destination"));
+}else if(!RAIL_ROUTE.options.length){
+frag.appendChild(opt("", "No rail routes on file"));
+}else{
+const bc = findRateByGroup(q.originFac, q.destCity, q.destState, q.destZip, "BOXCAR");
+const cb = findRateByGroup(q.originFac, q.destCity, q.destState, q.destZip, "CENTERBEAM");
+const cur = (bc || cb)?.currency || "USD";
+frag.appendChild(opt("", "Cheapest (default) \u2014 Box " + _fmtShort(bc ? Number(bc.flat) : null, cur) + " / CB " + _fmtShort(cb ? Number(cb.flat) : null, cur)));
+RAIL_ROUTE.options.forEach((o, i) => {
+frag.appendChild(opt(o.key, (i + 1) + ". " + railRouteLabel(o) + " \u2014 Box " + _fmtShort(o.bc, o.currency) + " / CB " + _fmtShort(o.cb, o.currency)));
+});
+}
+sel.replaceChildren(frag);
+sel.value = "";
+sel.disabled = RAIL_ROUTE.options.length === 0;
+sel.title = sel.options[0] ? sel.options[0].textContent : "";
+if(msg){
+const n = RAIL_ROUTE.options.length;
+msg.className = "shipto-msg";
+msg.textContent = !q.lane ? "" : (n ? n + " route" + (n > 1 ? "s" : "") + " on file for this lane" + (n > 1 ? " \u2013 pick one to re-quote" : "") : "");
+}
+}
+function onRailRouteChange(){
+const sel = document.getElementById("railRoute");
+RAIL_ROUTE.selected = sel ? sel.value : "";
+if(sel) sel.title = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : "";
+// Re-quote right away when the results on screen are for this lane.
+const lq = window._lastQuery;
+if(SELECTED_MODE === "RAIL" && currentCompareMatches && lq){
+const lastLane = [lq.originFac, lq.destCity, lq.destState, lq.destCity ? "" : lq.destZip].join("|");
+if(lastLane === RAIL_ROUTE.lane) runRailCompare(lq.originFac, lq.destCity, lq.destState, lq.destZip, currentCompareMatches.miles);
+}
+}
+function pickRailRoute(i){
+const o = RAIL_ROUTE.options[i];
+const sel = document.getElementById("railRoute");
+if(!sel) return;
+sel.value = o ? o.key : "";
+onRailRouteChange();
+}
+function railRoutesPanelHTML(){
+const lq = window._lastQuery;
+const opts = RAIL_ROUTE.options;
+if(!lq || !opts.length) return "";
+const lastLane = [lq.originFac, lq.destCity, lq.destState, lq.destCity ? "" : lq.destZip].join("|");
+if(lastLane !== RAIL_ROUTE.lane) return "";
+const SHOW = 5;
+const row = (o, i) => `<tr class="${o.key === RAIL_ROUTE.selected ? "rr-sel" : ""}${i >= SHOW ? " rr-more" : ""}" ${i >= SHOW ? 'style="display:none;"' : ""} onclick="pickRailRoute(${i})" title="Quote this route">
+<td>${i + 1}</td><td class="rr-route">${_escHtml(o.route ? _routeArrows(o.route) : "(route not listed)")}</td><td>${_escHtml(o.destRR || "\u2014")}</td>
+<td class="mono">${_fmtShort(o.bc, o.currency)}</td><td class="mono">${_fmtShort(o.cb, o.currency)}</td></tr>`;
+const more = opts.length > SHOW ? `<button class="eca-toggle" onclick="this.previousElementSibling.querySelectorAll('.rr-more').forEach(r=>r.style.display=r.style.display==='none'?'':'none');this.textContent=this.textContent.startsWith('Show all')?'Show top ${SHOW}':'Show all ${opts.length}'">Show all ${opts.length}</button>` : "";
+return `<div class="rail-routes"><div class="rail-routes-title">Routes on file for this lane <span>\u2014 cheapest first \u00b7 click a row (or use the Route dropdown) to quote it</span></div>
+<table class="rail-routes-table"><thead><tr><th>#</th><th>Route</th><th>Dest. RR</th><th>Boxcar</th><th>Centerbeam</th></tr></thead><tbody>${opts.map(row).join("")}</tbody></table>${more}</div>`;
 }
 
 async function getMileageCached(originZip, originFac, destZip, destCity, destState){
@@ -1653,7 +1838,7 @@ best = { ...r, score: scored };
 return bestScore >= 0 ? best : null;
 }
 
-function findRateByGroup(originFac, destCity, destState, destZip, group){
+function findRateByGroup(originFac, destCity, destState, destZip, group, routeKey){
 let best = null;
 let bestScore = -1;
 let bestPriority = 999;
@@ -1661,6 +1846,7 @@ let bestPrice = Infinity;
 for(const r of RATES){
 if(r.mode !== "RAIL") continue;
 if(railEquipGroup(r.equip) !== group) continue;
+if(routeKey && railRouteKey(r) !== routeKey) continue;  // Route dropdown filter
 const scored = scoreRate(r, originFac, destCity, destState, destZip);
 if(scored < 0) continue;
 let priority = 0;
@@ -1862,7 +2048,15 @@ content.innerHTML = '<div class="no-results">No boxcar or centerbeam rates found
 return;
 }
 badge.innerHTML = '<span class="match-badge match-exact">Compare Mode</span>';
-rateTypeBadge.innerHTML = '<span style="font-size:12px;color:#1e293b;margin-left:4px;">Boxcar vs Centerbeam</span>';
+const selRoute = RAIL_ROUTE.selected ? RAIL_ROUTE.options.find(o => o.key === RAIL_ROUTE.selected) : null;
+rateTypeBadge.innerHTML = '<span style="font-size:12px;color:#1e293b;margin-left:4px;">Boxcar vs Centerbeam' + (selRoute ? ' \u00b7 ' + _escHtml(railRouteLabel(selRoute)) : '') + '</span>';
+let routeNote = "";
+if(selRoute && RAIL_ROUTE.options.length){
+const cheapest = RAIL_ROUTE.options[0];
+routeNote = cheapest.key === selRoute.key
+  ? `<div class="rail-route-note">Route picked: <strong>${_escHtml(railRouteLabel(selRoute))}</strong> (cheapest route on file).</div>`
+  : `<div class="rail-route-note">Route picked: <strong>${_escHtml(railRouteLabel(selRoute))}</strong> \u2014 not the cheapest. Cheapest on file: ${_escHtml(railRouteLabel(cheapest))} at ${_fmtShort(cheapest.best, cheapest.currency)}.</div>`;
+}
 
 const bcCur = boxcar?.currency || "USD";
 const cbCur = centerbeam?.currency || "USD";
@@ -1896,6 +2090,7 @@ return `<div class="compare-card">
 <div class="truck-rail-row"><span class="truck-rail-label">Equipment</span><span class="truck-rail-value">${m.equip||"—"}</span></div>
 <div class="truck-rail-row"><span class="truck-rail-label">Currency</span><span class="truck-rail-value">${cur}</span></div>
 ${routeArrows ? `<div class="rail-route-block"><span class="truck-rail-label">Route</span><div class="rail-route-val">${routeArrows}</div></div>` : ""}
+${m.destRR ? `<div class="truck-rail-row"><span class="truck-rail-label">Dest. railroad</span><span class="truck-rail-value">${_escHtml(m.destRR)}</span></div>` : ""}
 ${split ? `<div class="rail-route-block"><span class="truck-rail-label">Carrier split</span><div class="rail-route-val">${split}</div></div>` : ""}
 ${feesRow}
 <div class="truck-rail-row"><span class="truck-rail-label">Total Rate</span><span class="truck-rail-value">${fmt(total,cur)}</span></div>
@@ -1904,11 +2099,13 @@ ${feesRow}
 };
 
 content.innerHTML = `
+${routeNote}
 ${winnerNote}
 <div class="compare-grid">
 ${cardHtml("Boxcar", boxcar, bcCur, bcTotal)}
 ${cardHtml("Centerbeam", centerbeam, cbCur, cbTotal)}
-</div>`;
+</div>
+${railRoutesPanelHTML()}`;
 }
 
 function fmt(n, currency){
@@ -1999,6 +2196,7 @@ _setShipToMsg("", "");
 LAST_DEST_ZIPS = [];
 hideZipPicker();
 clearResultsOnly();
+refreshRailRouteOptions();
 }
 
 loadRates();
