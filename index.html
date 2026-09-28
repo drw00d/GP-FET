@@ -38,12 +38,18 @@ background:#fef2f2;border-left:3px solid var(--error);color:var(--error);
 padding:10px 16px;font-size:13px;font-weight:500;margin-bottom:16px;border-radius:4px;display:none;
 }
 .error-banner.show{display:block;}
-.form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:"biz mode cust" "week route ship";gap:14px;margin-bottom:16px;align-items:start;}
-.fg-biz{grid-area:biz;} .fg-mode{grid-area:mode;} .fg-cust{grid-area:cust;} .fg-week{grid-area:week;} .fg-ship{grid-area:ship;} .fg-route{grid-area:route;min-width:0;}
-.fg-route[hidden]{display:none;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:"biz mode cust" "week . ship";gap:14px;margin-bottom:16px;align-items:start;}
+.fg-biz{grid-area:biz;} .fg-mode{grid-area:mode;} .fg-cust{grid-area:cust;} .fg-week{grid-area:week;} .fg-ship{grid-area:ship;}
 @media (max-width:640px){
 .form-grid{grid-template-columns:1fr;grid-template-areas:"biz" "mode" "cust" "ship" "week";}
-.form-grid.is-rail{grid-template-areas:"biz" "mode" "cust" "ship" "route" "week";}
+}
+/* Rail Route picker: its own row directly under the Destination fields (rail only) */
+.route-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:-6px;margin-bottom:18px;}
+.route-row[hidden]{display:none;}
+.route-row .fg-route{grid-column:span 2;min-width:0;}
+@media (max-width:640px){
+.route-row{grid-template-columns:1fr;}
+.route-row .fg-route{grid-column:auto;}
 }
 .form-row-5{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px;margin-bottom:16px;}
 .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
@@ -537,13 +543,6 @@ document.getElementById("appContainer").innerHTML = `
 <label for="weekOf">Week Of</label>
 <input type="date" id="weekOf" value="${new Date().toISOString().slice(0,10)}">
 </div>
-<div class="field fg-route" id="railRouteWrap" hidden>
-<label for="railRoute">Route</label>
-<select id="railRoute" onchange="onRailRouteChange()" disabled title="Rail routes on file for this lane (cheapest first)">
-<option value="">Enter origin + destination</option>
-</select>
-<div class="shipto-msg" id="railRouteMsg" aria-live="polite"></div>
-</div>
 <div class="field fg-ship">
 <label for="shipToId">Ship-To / Party ID</label>
 <input type="text" id="shipToId" list="shipToList" autocomplete="off" spellcheck="false" placeholder="e.g. 250019326 or PL7L11" title="Type a Ship-To / Party ID and press Enter to fill the destination">
@@ -589,6 +588,15 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <label>Destination Zip</label>
 <input type="text" id="destZip" placeholder="e.g. 30303">
 <div class="zip-hint" id="zipHint" style="display:none;">Select a ZIP suggestion (or type one).</div>
+</div>
+</div>
+<div class="route-row" id="railRouteWrap" hidden>
+<div class="field fg-route">
+<label for="railRoute">Rail Route</label>
+<select id="railRoute" onchange="onRailRouteChange()" disabled title="Rail routes on file for this lane (cheapest first)">
+<option value="">Enter origin + destination</option>
+</select>
+<div class="shipto-msg" id="railRouteMsg" aria-live="polite"></div>
 </div>
 </div>
 <div class="field" id="truckEquipWrap" style="display:none; margin-bottom:16px;">
@@ -1425,7 +1433,6 @@ const msg = document.getElementById("railRouteMsg");
 if(!wrap || !sel) return;
 const isRail = SELECTED_MODE === "RAIL";
 wrap.hidden = !isRail;
-document.querySelector(".form-grid")?.classList.toggle("is-rail", isRail);
 if(!isRail) return;
 const q = _railLaneFromForm();
 if(q.lane && q.lane === RAIL_ROUTE.lane) return;  // same lane: keep list + selection
