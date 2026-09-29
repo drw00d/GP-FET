@@ -279,6 +279,9 @@ table.rail-routes-table tbody tr.rr-sel td:first-child{box-shadow:inset 3px 0 0 
 .rail-route-note{margin:0 12px 12px;}
 table.rail-routes-table thead th,table.rail-routes-table tbody td{padding:6px 8px;}
 }
+/* DOE truck fuel line */
+.fuel-note{display:block;font-size:11px;color:var(--text-muted);font-style:italic;font-weight:400;margin-top:2px;}
+.fuel-na{color:#b45309;font-weight:600;font-style:normal;}
 /* Ship-To / Party ID lookup (under the Customer dropdown) */
 .shipto-msg{font-size:11px;line-height:1.35;min-height:0;color:var(--text-muted);}
 .shipto-msg.hit{color:#15803d;}
@@ -314,6 +317,7 @@ let BTRAIN_ORIGINS = new Set();  // truck origins that actually have B-Train rat
 let ECA = {};  // "CITY,STATE" (GP mill) -> [ {name,city,state,postal,country}, ... ] competitor linkages
 let ECA_RATES = [];  // competitor destination lane rates (rail-shaped) from Rate Update Work
 let ECA_RATE_INDEX = {};  // "OCITY,OST|DCITY,DST" -> [{name, flat, currency, railroad, stcc, gpPlant, origLoc, destLoc}, ...]
+let FSC = null;  // DOE truck fuel settings from rates.json: {doe, week, base, mpg, source}
 let SHIP_TO = {};  // normalized Ship-To / Party ID -> {name, city, state, zip, country, customer, src, rail?, n?, last?}
 let SHIP_TO_APPLIED = null;  // {id, entry, city, state, setCustomer} for the last successful lookup
 // Rail Route picker: distinct routes (TotalRoute + destination serving railroad)
@@ -491,6 +495,7 @@ for(const raw of ECA_RATES){
 ORIGIN_BUSINESS = data.origin_business || {};
 ORIGIN_DIVISION = data.origin_division || {};
 SHIP_TO = data.ship_to || {};
+FSC = data.fsc || null;
 buildUI();
 buildBusinessFilterOptions();
 const btrainCount = RATES.filter(r=>r.mode==="TRUCK" && isBTrainEquip(r.equip)).length;
@@ -623,7 +628,7 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <input class="adj-input" type="number" id="pctAdj" value="0" step="0.1" min="-100" max="999" onchange="recalc()" oninput="recalc()">
 <span>%</span>
 </div>
-<span class="adj-hint">Positive = markup &nbsp;|&nbsp; Negative = discount</span>
+<span class="adj-hint">Positive = markup &nbsp;|&nbsp; Negative = discount &nbsp;|&nbsp; linehaul only (fuel unchanged)</span>
 </div>
 <div id="resultsContent">
 <div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>
@@ -1576,19 +1581,45 @@ return c.postal ? `${base} ${c.postal}` : base;
 
 function _titleCase(s){ return (s||"").toLowerCase().replace(/\b\w/g, ch=>ch.toUpperCase()); }
 
+// ---- DOE truck fuel ----
+// Truck fuel $/mi = (EIA weekly U.S. No 2 diesel retail - base) / mpg, rounded
+// to the cent (rates.json "fsc", refreshed by fuel_doe.py on each publish),
+// times Google miles. Same for flat (FC) and per-mile (MI) truck lanes.
+// Rail, B-Train and Lowe's/HD customer rates are all-in: no fuel added.
+function fscPerMile(){
+const f = FSC;
+if(!f) return null;
+const doe = Number(f.doe), base = Number(f.base), mpg = Number(f.mpg);
+if(!(doe > 0) || !isFinite(base) || !(mpg > 0)) return null;
+return Math.max(0, Math.round(((doe - base) / mpg) * 100) / 100);
+}
+function fscWeekLabel(){
+const w = String((FSC && FSC.week) || "");
+const m = w.match(/^\d{4}-(\d{2})-(\d{2})$/);
+return m ? (+m[1]) + "/" + (+m[2]) : w;
+}
+function fscSourceLabel(){
+return FSC ? "DOE $" + Number(FSC.doe).toFixed(3) + ", wk " + fscWeekLabel() : "";
+}
+// Fuel $ for a truck move of `miles` (0 when miles or the DOE price is missing).
+function truckFuelFor(miles){
+const f = fscPerMile();
+return (f != null && miles != null && miles > 0) ? f * miles : 0;
+}
+
 // GP per-mile total at 0% adjustment, mirroring displayResults/recalc:
-// max(rate*miles, minCharge) + fuel(25%). Used as the competitor comparison baseline.
+// max(rate*miles, minCharge) + DOE fuel. Used as the competitor comparison baseline.
 function _gpTotalForCompare(match, miles){
 const rate = Number(match.rate) || 0;
 const m = (miles != null) ? miles : 0;
 const minCharge = Number(match.minCharge) || 0;
-return Math.max(rate * m, minCharge) + (rate * m * 0.25);
+return Math.max(rate * m, minCharge) + truckFuelFor(m);
 }
 
 // Competitor (ECA) estimate: your same freight logic, run from each linked
 // competitor's own location to the destination.
-//   TRUCK: standard per-mile lanes — apply GP's per-mile rate + 25% fuel over
-//          the competitor's drive distance (B-Train flat lanes are skipped).
+//   TRUCK: standard per-mile lanes — apply GP's per-mile rate + DOE fuel $/mi
+//          over the competitor's drive distance (B-Train flat lanes are skipped).
 //   RAIL:  all-in flat lanes — derive GP's implied $/mi (flat total ÷ GP miles)
 //          and apply it over the competitor's distance (fuel already included,
 //          so no separate fuel line). Needs GP Google miles to set the yardstick.
@@ -1665,7 +1696,7 @@ comps.forEach((c, i) => {
   if(cm == null){ noRoute++; return; }
   const est = isRail
     ? (railRPM * cm)
-    : (Math.max(rate * cm, minCharge) + (rate * cm * 0.25));
+    : (Math.max(rate * cm, minCharge) + truckFuelFor(cm));
   rows.push({ name:c.name, loc:_titleCase(c.city)+", "+c.state, miles:cm, est, delta: est - gpTotal, quoted:false, railroad:"" });
 });
 
@@ -1698,6 +1729,10 @@ if(nQuoted){
   noteMethod = '<div class="eca-note">'+nQuoted+" competitor lane"+(nQuoted>1?"s":"")+" from Rate Update Work (ECA Rail Rates)."+(nEst ? " "+nEst+" other"+(nEst>1?"s":"")+" estimated from GP $/mi × competitor miles." : "")+"</div>";
 }else if(isRail){
   noteMethod = '<div class="eca-note">Rail estimate uses GP\'s implied '+fmt(railRPM, cur)+"/mi (lane total ÷ "+miles+" mi) applied to each competitor's distance — fuel included.</div>";
+}else{
+  const fpm = fscPerMile();
+  noteMethod = '<div class="eca-note">Truck estimate uses GP\'s '+fmt(rate, cur)+"/mi (min "+fmt(minCharge, cur)+") × each competitor's miles"
+    + (fpm != null ? " + DOE fuel "+fmt(fpm, cur)+"/mi ("+fscSourceLabel()+")." : " — fuel excluded (DOE price not loaded).") + "</div>";
 }
 content.innerHTML = '<table class="eca-table"><thead>'+head+"</thead><tbody>"+top+"</tbody>"+(rest ? '<tbody id="ecaRest" style="display:none;">'+rest+"</tbody>" : "")+"</table>"+(rest ? '<button class="eca-toggle" onclick="toggleEcaShowAll(this)">Show all '+rows.length+"</button>" : "")+noteMethod+noteRoute;
 }
@@ -1967,12 +2002,20 @@ const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : nu
 const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
 const milesFailed = isMI && miles==null;
 const gpAvg = isMI ? gpRate*milesActual : gpRate;
-// Rail and B-Train rates already include fuel in the rate - don't add it again
-const gpFuel = isAllIn ? 0 : (isMI ? gpRate*milesActual*0.25 : gpRate*0.18);
+// Rail, B-Train and customer rates already include fuel - don't add it again.
+// Truck fuel = DOE $/mi x Google miles (never the ~500 mi estimate); when miles
+// or the DOE price are missing, fuel is shown as unavailable (null), not $0.
+const fuelPerMile = isAllIn ? null : fscPerMile();
+const fuelMiles = (miles != null && miles > 0) ? miles : null;
+const gpFuel = isAllIn ? 0 : ((fuelPerMile != null && fuelMiles != null) ? fuelPerMile * fuelMiles : null);
+const fuelMissing = !isAllIn && gpFuel == null;
+const fuelNote = isAllIn ? "" : (!fuelMissing
+  ? `Fuel: ${fmt(fuelPerMile,currency)}/mi × ${fuelMiles} mi (${fscSourceLabel()})`
+  : (fuelPerMile == null ? "DOE fuel price not loaded — total excludes fuel" : "Google miles unavailable — can't price fuel; total excludes fuel"));
 // Rate Per Mile is shown ALL-IN, per user: Total Freight (avg + fuel) / miles.
 const rpmMiles = isMI ? milesActual : miles;
-const gpAllInRPM = (rpmMiles && rpmMiles > 0) ? (gpAvg + gpFuel) / rpmMiles : null;
-window._matchData = { type:"single", isMI, isRail: isAllIn, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM, rpmMiles };
+const gpAllInRPM = (rpmMiles && rpmMiles > 0) ? (gpAvg + (gpFuel || 0)) / rpmMiles : null;
+window._matchData = { type:"single", isMI, isRail: isAllIn, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM, rpmMiles, fuelMissing };
 const milesNote = milesFailed
 ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
 : (isMI && miles!=null)
@@ -1991,7 +2034,7 @@ content.innerHTML = `
 <td class="mono diff-zero">—</td>
 </tr>
 <tr>
-<td>Rate Per Mile <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(incl. fuel)</span></td>
+<td>Rate Per Mile <span style="font-size:11px;color:var(--text-muted);font-style:italic;">${fuelMissing ? "(excl. fuel)" : "(incl. fuel)"}</span></td>
 <td class="mono" id="gpRPM">${gpAllInRPM != null ? fmt(gpAllInRPM,currency) : "—"}<span class="currency-badge">${currency}</span></td>
 <td class="mono" id="adjRPM">${gpAllInRPM != null ? fmt(gpAllInRPM,currency) : "—"}</td>
 <td class="mono diff-zero" id="diffRPM">—</td>
@@ -2005,9 +2048,9 @@ ${isAllIn ?`
 </tr>
 ` : `
 <tr>
-<td>Fuel Per Load</td>
-<td class="mono" id="gpFuelCell">${fmt(gpFuel,currency)}<span class="currency-badge">${currency}</span></td>
-<td class="mono" id="adjFuelCell">${fmt(gpFuel,currency)}</td>
+<td>Fuel Per Load <span class="fuel-note${fuelMissing ? " fuel-na" : ""}" id="fuelNote">${fuelNote}</span></td>
+<td class="mono" id="gpFuelCell">${fuelMissing ? '<span class="fuel-na">unavailable</span>' : fmt(gpFuel,currency) + '<span class="currency-badge">' + currency + '</span>'}</td>
+<td class="mono" id="adjFuelCell">${fuelMissing ? '<span class="fuel-na">unavailable</span>' : fmt(gpFuel,currency)}</td>
 <td class="mono diff-zero" id="diffFuel">—</td>
 </tr>
 `}
@@ -2020,7 +2063,7 @@ ${isAllIn ?`
 </tbody>
 <tfoot>
 <tr class="total-row">
-<td>Total Freight Per Load</td>
+<td>Total Freight Per Load${fuelMissing ? ' <span class="fuel-note fuel-na" style="display:inline;">(excl. fuel)</span>' : ""}</td>
 <td class="mono" id="totalGP">${fmt(0,currency)}</td>
 <td class="mono" id="totalAdj">${fmt(0,currency)}</td>
 <td class="mono diff-zero" id="totalDiff">—</td>
@@ -2140,13 +2183,14 @@ const factor = 1 + pct/100;
 // Only show the Adjust Rate + % Difference columns once a real adjustment exists
 const _tbl = document.getElementById("rateTable");
 if(_tbl) _tbl.classList.toggle("no-adjust", pct === 0);
-const { isMI, isRail, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM, rpmMiles } = data;
+const { isMI, isRail, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM, rpmMiles, fuelMissing } = data;
 
 const adjAvg = Math.max(gpAvg * factor, minCharge);
-const adjFuel = gpFuel * factor;
+// % Adjustment applies to linehaul only - fuel stays at the DOE amount.
+const adjFuel = gpFuel;
 
-const gpTotal = gpAvg + gpFuel;
-const adjTotal = adjAvg + adjFuel;
+const gpTotal = gpAvg + (gpFuel || 0);
+const adjTotal = adjAvg + (adjFuel || 0);
 const totalPct = gpTotal > 0 ? ((adjTotal - gpTotal) / gpTotal) * 100 : 0;
 
 const setCell = (id, html, cls) => {
@@ -2166,11 +2210,11 @@ const rpmPct = gpAllInRPM > 0 ? ((adjAllInRPM - gpAllInRPM)/gpAllInRPM)*100 : 0;
 setCell("diffRPM", fmtPct(rpmPct), pctClass(rpmPct));
 }
 
-// Fuel cells only exist for non-rail (rail shows "included" placeholder)
-if(!isRail){
+// Fuel cells only exist for non-rail (rail shows "included" placeholder).
+// Fuel is not adjusted, so its % difference is always "—".
+if(!isRail && !fuelMissing){
 setCell("adjFuelCell", `${fmt(adjFuel,currency)}<span class="currency-badge">${currency}</span>`);
-const fuelPct = gpFuel > 0 ? ((adjFuel - gpFuel)/gpFuel)*100 : 0;
-setCell("diffFuel", fmtPct(fuelPct), pctClass(fuelPct));
+setCell("diffFuel", "—", "diff-zero");
 }
 
 setCell("adjAvgCell", `${fmt(adjAvg,currency)}<span class="currency-badge">${currency}</span>`);
