@@ -1528,7 +1528,22 @@ const originStr = buildOriginString(originZip, originFac);
 const destStr = buildDestString(destZip, destCity, destState);
 const key = _milesKey(originStr, destStr);
 if(milesCache.has(key)) return milesCache.get(key);
-const miles = await getMileageGoogle(originStr, destStr);
+let miles = await getMileageGoogle(originStr, destStr);
+// A wrong/unroutable ZIP makes Google answer 200 + ROUTE_NOT_FOUND (e.g. a bad
+// origin ZIP in rates.json origin_zips). Retry with city + state before giving up.
+if(typeof miles !== "number"){
+const oCity = buildOriginString("", originFac);
+const dCity = (destCity && destState) ? `${destCity} ${destState}`.trim() : destStr;
+const tries = [[oCity, destStr], [originStr, dCity], [oCity, dCity]]
+  .filter(([o, d], i, a) => o && d && !(o === originStr && d === destStr) && a.findIndex(([o2, d2]) => o2 === o && d2 === d) === i);
+for(const [o, d] of tries){
+  miles = await getMileageGoogle(o, d);
+  if(typeof miles === "number"){
+    console.warn(`GP-FET: no Google route for "${originStr}" -> "${destStr}"; used "${o}" -> "${d}" (${miles} mi). Check the ZIP.`);
+    break;
+  }
+}
+}
 if(typeof miles === "number"){
 milesCache.set(key, miles);
 saveMilesCache();
