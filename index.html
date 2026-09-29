@@ -330,7 +330,7 @@ let BTRAIN_ORIGINS = new Set();  // truck origins that actually have B-Train rat
 let ECA = {};  // "CITY,STATE" (GP mill) -> [ {name,city,state,postal,country}, ... ] competitor linkages
 let ECA_RATES = [];  // competitor destination lane rates (rail-shaped) from Rate Update Work
 let ECA_RATE_INDEX = {};  // "OCITY,OST|DCITY,DST" -> [{name, flat, currency, railroad, stcc, gpPlant, origLoc, destLoc}, ...]
-let FSC = null;  // DOE truck fuel settings from rates.json: {doe, week, base, mpg, source}
+let FSC = null;  // DOE truck fuel settings from rates.json: {doe, week, base, mpg, source, usdcad, fx_date}
 let SHIP_TO = {};  // normalized Ship-To / Party ID -> {name, city, state, zip, country, customer, src, rail?, n?, last?}
 let SHIP_TO_APPLIED = null;  // {id, entry, city, state, setCustomer} for the last successful lookup
 // Rail Route picker: distinct routes (TotalRoute + destination serving railroad)
@@ -1780,34 +1780,56 @@ if(vs && vs.dataset.total){
 // to the cent (rates.json "fsc", refreshed by fuel_doe.py on each publish),
 // times Google miles. Same for flat (FC) and per-mile (MI) truck lanes.
 // Rail, B-Train and Lowe's/HD customer rates are all-in: no fuel added.
-function fscPerMile(){
+function _isCAD(currency){ return String(currency||"").toUpperCase() === "CAD"; }
+// USD/CAD from rates.json fsc (Bank of Canada daily average, refreshed with DOE).
+function fscUsdCad(){
+const fx = FSC ? Number(FSC.usdcad) : NaN;
+return (fx > 0 && isFinite(fx)) ? fx : null;
+}
+// Fuel $/mi in the lane's currency. USD lanes: (DOE - base) / mpg, rounded to
+// the cent. C$ lanes: that USD $/mi x USD/CAD, rounded to the cent. null when
+// the DOE price (or, for C$ lanes, the exchange rate) isn't loaded.
+function fscPerMile(currency){
 const f = FSC;
 if(!f) return null;
 const doe = Number(f.doe), base = Number(f.base), mpg = Number(f.mpg);
 if(!(doe > 0) || !isFinite(base) || !(mpg > 0)) return null;
-return Math.max(0, Math.round(((doe - base) / mpg) * 100) / 100);
+const usd = Math.max(0, Math.round(((doe - base) / mpg) * 100) / 100);
+if(!_isCAD(currency)) return usd;
+const fx = fscUsdCad();
+return fx != null ? Math.round(usd * fx * 100) / 100 : null;
 }
 function fscWeekLabel(){
 const w = String((FSC && FSC.week) || "");
 const m = w.match(/^\d{4}-(\d{2})-(\d{2})$/);
 return m ? (+m[1]) + "/" + (+m[2]) : w;
 }
-function fscSourceLabel(){
-return FSC ? "DOE $" + Number(FSC.doe).toFixed(3) + ", wk " + fscWeekLabel() : "";
+function fscSourceLabel(currency){
+if(!FSC) return "";
+if(_isCAD(currency)){
+  const fx = fscUsdCad();
+  return "DOE $" + Number(FSC.doe).toFixed(3) + " wk " + fscWeekLabel() + (fx != null ? " × USD/CAD " + fx.toFixed(4) + "x" : "");
 }
-// Fuel $ for a truck move of `miles` (0 when miles or the DOE price is missing).
-function truckFuelFor(miles){
-const f = fscPerMile();
+return "DOE $" + Number(FSC.doe).toFixed(3) + ", wk " + fscWeekLabel();
+}
+// Why fuel can't be priced (DOE or, on C$ lanes, the exchange rate missing).
+function fscMissingNote(currency){
+if(fscPerMile() == null) return "DOE fuel price not loaded — total excludes fuel";
+if(_isCAD(currency) && fscUsdCad() == null) return "USD/CAD rate not loaded — can't convert fuel to C$; total excludes fuel";
+return "";
+}
+// Fuel for a truck move of `miles`, in the lane's currency (0 when miles, the
+// DOE price or the needed exchange rate are missing).
+function truckFuelFor(miles, currency){
+const f = fscPerMile(currency);
 return (f != null && miles != null && miles > 0) ? f * miles : 0;
 }
 
-// GP per-mile total at 0% adjustment, mirroring displayResults/recalc:
-// max(rate*miles, minCharge) + DOE fuel. Used as the competitor comparison baseline.
 function _gpTotalForCompare(match, miles){
 const rate = Number(match.rate) || 0;
 const m = (miles != null) ? miles : 0;
 const minCharge = Number(match.minCharge) || 0;
-return Math.max(rate * m, minCharge) + truckFuelFor(m);
+return Math.max(rate * m, minCharge) + truckFuelFor(m, match.currency);
 }
 
 // Competitor (ECA) estimate: your same freight logic, run from each linked
@@ -1892,7 +1914,7 @@ comps.forEach((c, i) => {
   if(cm == null){ noRoute++; return; }
   const est = isRail
     ? (railRPM * cm)
-    : (Math.max(rate * cm, minCharge) + truckFuelFor(cm));
+    : (Math.max(rate * cm, minCharge) + truckFuelFor(cm, cur));
   rows.push({ name:c.name, loc:_titleCase(c.city)+", "+c.state, miles:cm, est, delta: est - gpTotal, quoted:false, railroad:"" });
 });
 
@@ -1926,9 +1948,9 @@ if(nQuoted){
 }else if(isRail){
   noteMethod = '<div class="eca-note">Rail estimate uses GP\'s implied '+fmt(railRPM, cur)+"/mi (lane total ÷ "+miles+" mi) applied to each competitor's distance — fuel included.</div>";
 }else{
-  const fpm = fscPerMile();
+  const fpm = fscPerMile(cur);
   noteMethod = '<div class="eca-note">Truck estimate uses GP\'s '+fmt(rate, cur)+"/mi (min "+fmt(minCharge, cur)+") × each competitor's miles"
-    + (fpm != null ? " + DOE fuel "+fmt(fpm, cur)+"/mi ("+fscSourceLabel()+")." : " — fuel excluded (DOE price not loaded).") + "</div>";
+    + (fpm != null ? " + DOE fuel "+fmt(fpm, cur)+"/mi ("+fscSourceLabel(cur)+")." : " — fuel excluded (" + (fscMissingNote(cur) ? fscMissingNote(cur).split(" — ")[0] : "DOE price not loaded") + ").") + "</div>";
 }
 content.innerHTML = '<table class="eca-table"><thead>'+head+"</thead><tbody>"+top+"</tbody>"+(rest ? '<tbody id="ecaRest" style="display:none;">'+rest+"</tbody>" : "")+"</table>"+(rest ? '<button class="eca-toggle" onclick="toggleEcaShowAll(this)">Show all '+rows.length+"</button>" : "")+noteMethod+noteRoute;
 updateEcaMsf();
@@ -2203,13 +2225,13 @@ const gpAvg = isMI ? gpRate*milesActual : gpRate;
 // Rail, B-Train and customer rates already include fuel - don't add it again.
 // Truck fuel = DOE $/mi x Google miles (never the ~500 mi estimate); when miles
 // or the DOE price are missing, fuel is shown as unavailable (null), not $0.
-const fuelPerMile = isAllIn ? null : fscPerMile();
+const fuelPerMile = isAllIn ? null : fscPerMile(currency);
 const fuelMiles = (miles != null && miles > 0) ? miles : null;
 const gpFuel = isAllIn ? 0 : ((fuelPerMile != null && fuelMiles != null) ? fuelPerMile * fuelMiles : null);
 const fuelMissing = !isAllIn && gpFuel == null;
 const fuelNote = isAllIn ? "" : (!fuelMissing
-  ? `Fuel: ${fmt(fuelPerMile,currency)}/mi × ${fuelMiles} mi (${fscSourceLabel()})`
-  : (fuelPerMile == null ? "DOE fuel price not loaded — total excludes fuel" : "Google miles unavailable — can't price fuel; total excludes fuel"));
+  ? `Fuel: ${fmt(fuelPerMile,currency)}/mi × ${fuelMiles} mi (${fscSourceLabel(currency)})`
+  : (fuelPerMile == null ? fscMissingNote(currency) : "Google miles unavailable — can't price fuel; total excludes fuel"));
 // Rate Per Mile is shown ALL-IN, per user: Total Freight (avg + fuel) / miles.
 const rpmMiles = isMI ? milesActual : miles;
 const gpAllInRPM = (rpmMiles && rpmMiles > 0) ? (gpAvg + (gpFuel || 0)) / rpmMiles : null;
