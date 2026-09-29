@@ -238,6 +238,19 @@ text-align:center;
 /* Hide the Adjust Rate + % Difference columns until an adjustment is entered */
 #rateTable.no-adjust th:nth-child(3),#rateTable.no-adjust td:nth-child(3),
 #rateTable.no-adjust th:nth-child(4),#rateTable.no-adjust td:nth-child(4){display:none;}
+.msf-panel{padding:10px 24px;border-bottom:1.5px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;}
+.msf-panel[hidden]{display:none;}
+.msf-panel > label, .msf-panel .msf-f > label{font-size:12.5px;font-weight:600;color:var(--label);white-space:nowrap;}
+.msf-panel .msf-f{display:inline-flex;align-items:center;gap:6px;}
+.msf-panel .msf-f[hidden]{display:none;}
+.msf-panel select, .msf-panel input{font-size:12.5px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;background:#fff;color:var(--text);font-family:inherit;}
+.msf-panel input{width:64px;text-align:right;}
+.msf-panel select:focus, .msf-panel input:focus{outline:none;border-color:var(--border-focus);}
+.tot-flex{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;}
+.msf-val{text-align:right;white-space:nowrap;}
+.msf-val .msf-unit{font-size:11px;font-weight:600;color:var(--text-muted);margin-left:3px;}
+.msf-sub{display:block;font-size:10.5px;font-weight:400;color:var(--text-muted);font-family:inherit;margin-top:2px;white-space:nowrap;}
+.msf-mini{display:block;font-size:11px;font-weight:600;color:var(--text-muted);margin-top:2px;}
 /* Competitor (ECA) comparison table */
 .eca-table{width:100%;border-collapse:collapse;font-size:13px;}
 .eca-table th{text-align:left;color:var(--text-muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:8px 12px;border-bottom:1px solid var(--border);}
@@ -630,6 +643,15 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 </div>
 <span class="adj-hint">Positive = markup &nbsp;|&nbsp; Negative = discount &nbsp;|&nbsp; linehaul only (fuel unchanged)</span>
 </div>
+<div class="msf-panel" id="msfPanel" hidden>
+<label for="msfTable" title="$ per thousand square feet: total freight ÷ sqft per load × 1000 (actual sqft, not 3/8 basis)">$/MSF</label>
+<select id="msfTable" onchange="onMsfTableChange()" title="Mill loading table (Rate Calculator)"></select>
+<span class="msf-f"><label for="msfThick">Thickness</label><select id="msfThick" onchange="onMsfChange()"></select></span>
+<span class="msf-f" id="msfTruckWrap"><label for="msfUnitsTruck">Units/Load</label><input type="number" id="msfUnitsTruck" min="0" step="1" oninput="onMsfChange()"></span>
+<span class="msf-f" id="msfBoxWrap" hidden><label for="msfBoxLen">Boxcar</label><select id="msfBoxLen" onchange="onMsfBoxLenChange()"><option value="50">50 ft</option><option value="52">52 ft</option><option value="60">60 ft</option></select><input type="number" id="msfUnitsBox" min="0" step="1" oninput="onMsfChange()" title="Boxcar units/load"><label for="msfUnitsBox" style="font-weight:500;">units</label></span>
+<span class="msf-f" id="msfCbWrap" hidden><label for="msfUnitsCb">Centerbeam (73' CTR)</label><input type="number" id="msfUnitsCb" min="0" step="1" oninput="onMsfChange()"><label for="msfUnitsCb" style="font-weight:500;">units</label></span>
+<span class="adj-hint" id="msfHint"></span>
+</div>
 <div id="resultsContent">
 <div class="no-results">Enter origin and destination details above and click Submit to get a freight estimate.</div>
 </div>
@@ -869,6 +891,7 @@ const existing = document.getElementById("truckRailCompareBox");
 if(existing) existing.remove();
 const ecaC = document.getElementById("ecaCard");
 if(ecaC) ecaC.style.display = "none";
+const msfP = document.getElementById("msfPanel"); if(msfP) msfP.hidden = true;
 }
 
 // ---- Business unit (Gypsum / Wood Products / Other) helpers ----
@@ -1581,6 +1604,176 @@ return c.postal ? `${base} ${c.postal}` : base;
 
 function _titleCase(s){ return (s||"").toLowerCase().replace(/\b\w/g, ch=>ch.toUpperCase()); }
 
+// ---- $/MSF (freight per thousand sq ft) ----
+// From Matt's "Rate Calculator" sheet: sqft per unit = panels per unit x sqft
+// per panel (32 for 4x8; Clarendon 7/16-9 = 36, 7/16-10 = 40, Plywood 3/8 = 36
+// as written), sqft per load = sqft/unit x units per load (mill + equipment),
+// $/MSF = total freight / sqft per load x 1000. Actual sqft (not 3/8 basis).
+// MSF_TABLES is generated from the workbook: units = units/load by equipment
+// (VAN, TRUCK, 50/52/60 ft car, CTR = 73' centerbeam); sizes = [thickness,
+// panels per unit, sqft per panel].
+const MSF_TABLES = {"FH":{"name":"FORDYCE(311)-SW  /  HOSFORD(312)-SE","units":{"VAN":11,"TRUCK":12,"50":36,"52":36,"60":45,"CTR":54},"sizes":[["1/4",140,32],["3/8",94,32],["7/16",90,32],["15/32",70,32],["1/2",70,32],["19/32",63,32],["23/32",50,32],["7/8",40,32]]},"BROOKNEAL":{"name":"BROOKNEAL(514)-MA","units":{"TRUCK":11,"50":36,"52":36,"60":45},"sizes":[["1/4",140,32],["3/8",90,32],["7/16",87,32],["15/32",78,32],["1/2",70,32],["19/32",63,32],["23/32",50,32],["7/8",40,32]]},"ENGLEHART":{"name":"ENGLEHART(517)-NC/EC","units":{"TRUCK":12,"50":36,"60":45,"CTR":54},"sizes":[["3/8",100,32],["7/16",90,32],["15/32",80,32],["1/2",78,32],["5/8",63,32],["19/32",65,32],["23/32",55,32],["7/8",45,32],["1-1/8",41,32]]},"CLARENDON":{"name":"Clarendon(516)-SE","units":{"TRUCK":12,"50":52,"60":56,"CTR":54},"sizes":[["3/8",92,32],["7/16",90,32],["7/16-9",76,36],["7/16-10",68,40],["15/32",75,32],["1/2",70,32],["19/32",63,32],["23/32",50,32]]},"PLYWOOD":{"name":"Plywood","units":{"TRUCK":12,"50":52,"60":58},"sizes":[["1/4",108,32],["11/32",90,32],["3/8",90,36],["15/32",70,32],["19/32",58,32],["23/32",48,32]]}};
+const MSF_TABLE_LABELS = { FH:"Fordyce / Hosford OSB", BROOKNEAL:"Brookneal OSB", ENGLEHART:"Englehart OSB", CLARENDON:"Clarendon OSB", PLYWOOD:"Plywood" };
+// Origin (CITY,ST) -> mill table. Plywood = GP's APA plywood mills. Anything
+// else (lumber, gypsum, distribution, unconfirmed panel sites) has no table:
+// Units/Load starts blank and $/MSF shows "—" until the user fills it in.
+const MSF_ORIGIN_TABLE = {
+"FORDYCE,AR":"FH", "HOSFORD,FL":"FH",
+"GLADYS,VA":"BROOKNEAL", "NARUNA,VA":"BROOKNEAL",
+"ENGLEHART,ON":"ENGLEHART",
+"ALCOLU,SC":"CLARENDON",
+"CAMDEN,TX":"PLYWOOD", "CORRIGAN,TX":"PLYWOOD", "DUDLEY,NC":"PLYWOOD", "GURDON,AR":"PLYWOOD",
+"MADISON,GA":"PLYWOOD", "MADISON (CPR),GA":"PLYWOOD", "PROSPERITY,SC":"PLYWOOD", "TAYLORSVILLE,MS":"PLYWOOD"
+};
+const MSF = { ctxKey:"", origin:"", table:"", thick:"", kind:"", boxLenFromCode:null, ecaKind:"" };
+function _msfOriginKey(originFac){ return (originFac||"").split(",").slice(0,2).join(",").trim().toUpperCase(); }
+function _msfDefaultThick(tkey){
+const t = MSF_TABLES[tkey]; if(!t) return "";
+const names = t.sizes.map(z=>z[0]);
+return names.includes("7/16") ? "7/16" : (names.includes("15/32") ? "15/32" : (names[0]||""));
+}
+function _msfSize(){
+const t = MSF_TABLES[MSF.table]; if(!t) return null;
+return t.sizes.find(z=>z[0] === MSF.thick) || null;
+}
+// Boxcar car length from the equipment code (60BX000HV -> 60, 52BX000 -> 52,
+// 50CH0PD -> 50, B52 -> 52). null when the code doesn't say.
+function _msfBoxLen(code){
+const c = (code||"").toString().trim().toUpperCase();
+const m = c.match(/^(\d{2})(BX|CH)/) || c.match(/^B(\d{2})$/) || c.match(/^HF?(\d{2})$/);
+// Only lengths the loading tables know (50/52/60); anything else -> unknown.
+return (m && ["50","52","60"].includes(m[1])) ? m[1] : null;
+}
+function _msfUnitsFor(kind){
+const t = MSF_TABLES[MSF.table];
+if(!t) return "";
+if(kind === "truck") return MSF.btrain ? "" : (t.units.TRUCK ?? "");
+if(kind === "cb") return t.units.CTR ?? "";
+if(kind === "box"){ const len = document.getElementById("msfBoxLen")?.value || ""; return t.units[len] ?? ""; }
+return "";
+}
+function _msfFillTableSelect(){
+const sel = document.getElementById("msfTable"); if(!sel) return;
+const auto = MSF_ORIGIN_TABLE[MSF.origin] || "";
+let html = `<option value="">${auto ? "— none —" : "No table for this origin"}</option>`;
+for(const k of Object.keys(MSF_TABLES)) html += `<option value="${k}">${MSF_TABLE_LABELS[k] || k}${k === auto ? " (this mill)" : ""}</option>`;
+sel.innerHTML = html;
+sel.value = MSF.table;
+}
+function _msfFillThickSelect(){
+const sel = document.getElementById("msfThick"); if(!sel) return;
+const t = MSF_TABLES[MSF.table];
+if(!t){ sel.innerHTML = '<option value="">—</option>'; sel.disabled = true; MSF.thick = ""; return; }
+sel.disabled = false;
+sel.innerHTML = t.sizes.map(z=>`<option value="${z[0]}">${z[0]}"</option>`).join("");
+if(!t.sizes.some(z=>z[0] === MSF.thick)) MSF.thick = _msfDefaultThick(MSF.table);
+sel.value = MSF.thick;
+}
+function _msfSetUnits(id, v){ const el = document.getElementById(id); if(el) el.value = (v === "" || v == null) ? "" : String(v); }
+function _msfPrefillUnits(){
+_msfSetUnits("msfUnitsTruck", _msfUnitsFor("truck"));
+const bl = document.getElementById("msfBoxLen");
+if(bl){
+  const t = MSF_TABLES[MSF.table];
+  const lens = ["50","52","60"];
+  for(const o of bl.options){ o.disabled = !!t && !(o.value in t.units); }
+  // Length from the rate's equipment code; if unknown, 50 ft (user can change).
+  let len = MSF.boxLenFromCode || "50";
+  if(t && !(len in t.units) && !MSF.boxLenFromCode) len = lens.find(l => l in t.units) || "50";
+  bl.value = len;
+}
+_msfSetUnits("msfUnitsBox", _msfUnitsFor("box"));
+_msfSetUnits("msfUnitsCb", _msfUnitsFor("cb"));
+}
+// Called whenever a new quote is shown. ctx = {kind:"truck"|"rail", originFac,
+// truckEquip, boxEquip}. Keeps the user's edits while the origin/equipment
+// context is unchanged (e.g. % Adjustment, re-running the same lane).
+function msfPrepare(ctx){
+const panel = document.getElementById("msfPanel");
+if(!panel) return;
+if(!ctx){ panel.hidden = true; return; }
+const origin = _msfOriginKey(ctx.originFac);
+const btrain = ctx.kind === "truck" && isBTrainEquip(ctx.truckEquip);
+const boxLen = ctx.kind === "rail" ? _msfBoxLen(ctx.boxEquip) : null;
+const key = [origin, ctx.kind, btrain ? "BT" : "", boxLen || ""].join("|");
+MSF.kind = ctx.kind;
+if(key !== MSF.ctxKey){
+  if(origin !== MSF.origin){ MSF.origin = origin; MSF.table = MSF_ORIGIN_TABLE[origin] || ""; MSF.thick = _msfDefaultThick(MSF.table); }
+  MSF.ctxKey = key; MSF.btrain = btrain; MSF.boxLenFromCode = boxLen;
+  _msfFillTableSelect(); _msfFillThickSelect(); _msfPrefillUnits();
+}
+document.getElementById("msfTruckWrap").hidden = ctx.kind !== "truck";
+document.getElementById("msfBoxWrap").hidden = ctx.kind !== "rail";
+document.getElementById("msfCbWrap").hidden = ctx.kind !== "rail";
+panel.hidden = false;
+_msfHint();
+}
+function _msfHint(){
+const h = document.getElementById("msfHint"); if(!h) return;
+const auto = MSF_ORIGIN_TABLE[MSF.origin] || "";
+if(!MSF.table) h.textContent = "No loading table for this origin — pick a mill table and enter units/load.";
+else if(MSF.table !== auto) h.textContent = "Using " + (MSF_TABLE_LABELS[MSF.table]||MSF.table) + " table (not this origin's default).";
+else h.textContent = "";
+}
+function onMsfTableChange(){
+MSF.table = document.getElementById("msfTable")?.value || "";
+_msfFillThickSelect(); _msfPrefillUnits(); _msfHint();
+msfRefresh();
+}
+function onMsfBoxLenChange(){
+_msfSetUnits("msfUnitsBox", _msfUnitsFor("box"));
+msfRefresh();
+}
+function onMsfChange(){
+MSF.thick = document.getElementById("msfThick")?.value || MSF.thick;
+msfRefresh();
+}
+// sqft per load for "truck" | "box" | "cb" -> {sqft, units, pcs, per, thick} or null.
+function msfSqft(kind){
+const z = _msfSize(); if(!z) return null;
+const id = kind === "truck" ? "msfUnitsTruck" : (kind === "box" ? "msfUnitsBox" : "msfUnitsCb");
+const units = Number(document.getElementById(id)?.value);
+if(!(units > 0)) return null;
+return { sqft: z[1] * z[2] * units, units, pcs: z[1], per: z[2], thick: z[0] };
+}
+function msfValue(total, kind){
+const q = msfSqft(kind);
+return (q && total != null && isFinite(total) && total > 0) ? total / q.sqft * 1000 : null;
+}
+function msfSubtitle(kind){
+const q = msfSqft(kind);
+if(!q) return MSF_TABLES[MSF.table] ? "enter Units/Load" : "no loading table";
+return `${q.thick}" · ${q.units} units × ${q.pcs} pcs${q.per !== 32 ? " × " + q.per + " sf" : ""} · ${q.sqft.toLocaleString("en-US")} sqft`;
+}
+function msfValHTML(total, kind, currency, withSub){
+const v = msfValue(total, kind);
+return `<span class="msf-val">${v != null ? fmt(v, currency) : "—"}<span class="msf-unit">/MSF</span>${withSub ? `<span class="msf-sub">${msfSubtitle(kind)}</span>` : ""}</span>`;
+}
+// Re-render every $/MSF on screen (quote total, rail cards, competitor table).
+function msfRefresh(){
+if(window._matchData && window._matchData.type === "single") recalc();
+const cc = currentCompareMatches;
+if(cc){
+  for(const [kind, m, id] of [["box", cc.boxcar, "msfBox"], ["cb", cc.centerbeam, "msfCb"]]){
+    const el = document.getElementById(id);
+    if(el && m) el.innerHTML = msfValHTML(Number(m.flat)||0, kind, m.currency || "USD", true);
+  }
+}
+updateEcaMsf();
+}
+function updateEcaMsf(){
+const kind = MSF.ecaKind || "truck";
+document.querySelectorAll("#ecaContent .eca-msf[data-est]").forEach(td=>{
+  const v = msfValue(Number(td.dataset.est), kind);
+  td.textContent = v != null ? fmt(v, td.dataset.cur || "USD") : "—";
+});
+const vs = document.getElementById("ecaVsGp");
+if(vs && vs.dataset.total){
+  const v = msfValue(Number(vs.dataset.total), kind);
+  vs.textContent = "vs GP " + fmt(Number(vs.dataset.total), vs.dataset.cur || "USD") + (v != null ? " (" + fmt(v, vs.dataset.cur || "USD") + "/MSF)" : "");
+}
+}
+
 // ---- DOE truck fuel ----
 // Truck fuel $/mi = (EIA weekly U.S. No 2 diesel retail - base) / mpg, rounded
 // to the cent (rates.json "fsc", refreshed by fuel_doe.py on each publish),
@@ -1665,6 +1858,8 @@ const minCharge = Number(match && match.minCharge) || 0;
 const cur = (match && match.currency) || "USD";
 const gpTotal = isRail ? railFlat : (match ? _gpTotalForCompare(match, miles) : 0);
 
+MSF.ecaKind = isRail ? (railEquipGroup(match.equip) === "BOXCAR" ? "box" : "cb") : "truck";
+vsGp.dataset.total = gpTotal > 0 ? String(gpTotal) : ""; vsGp.dataset.cur = cur;
 vsGp.textContent = gpTotal > 0 ? ("vs GP " + fmt(gpTotal, cur)) : "";
 const nActual = Object.keys(actualByName).length;
 content.innerHTML = '<div class="eca-loading">'+(hasActual ? "Loading" : "Estimating")+" "+comps.length+" competitor"+(comps.length>1?"s":"")+(nActual ? " ("+nActual+" quoted)" : "")+"…</div>";
@@ -1715,9 +1910,9 @@ const renderRow = (r)=>{
   const deltaCell = gpTotal > 0
     ? (dot+sign+fmt(Math.abs(r.delta), cur))
     : "—";
-  return "<tr><td>"+r.name+badge+'</td><td class="eca-loc">'+r.loc+'</td><td class="mono" style="text-align:right;">'+milesCell+'</td><td class="mono" style="text-align:right;">'+fmt(r.est, cur)+'</td><td class="mono '+cls+'" style="text-align:right;">'+deltaCell+"</td></tr>";
+  return "<tr><td>"+r.name+badge+'</td><td class="eca-loc">'+r.loc+'</td><td class="mono" style="text-align:right;">'+milesCell+'</td><td class="mono" style="text-align:right;">'+fmt(r.est, cur)+'</td><td class="mono eca-msf" style="text-align:right;" data-est="'+r.est+'" data-cur="'+cur+'">—</td><td class="mono '+cls+'" style="text-align:right;">'+deltaCell+"</td></tr>";
 };
-const head = '<tr><th>Competitor</th><th>Location</th><th style="text-align:right;">Miles</th><th style="text-align:right;">Total</th><th style="text-align:right;">&Delta; vs GP</th></tr>';
+const head = '<tr><th>Competitor</th><th>Location</th><th style="text-align:right;">Miles</th><th style="text-align:right;">Total</th><th style="text-align:right;" title="Competitor total ÷ the same sqft per load as the GP quote">$/MSF</th><th style="text-align:right;">&Delta; vs GP</th></tr>';
 const TOPN = 5;
 const top = rows.slice(0, TOPN).map(renderRow).join("");
 const rest = rows.slice(TOPN).map(renderRow).join("");
@@ -1735,6 +1930,7 @@ if(nQuoted){
     + (fpm != null ? " + DOE fuel "+fmt(fpm, cur)+"/mi ("+fscSourceLabel()+")." : " — fuel excluded (DOE price not loaded).") + "</div>";
 }
 content.innerHTML = '<table class="eca-table"><thead>'+head+"</thead><tbody>"+top+"</tbody>"+(rest ? '<tbody id="ecaRest" style="display:none;">'+rest+"</tbody>" : "")+"</table>"+(rest ? '<button class="eca-toggle" onclick="toggleEcaShowAll(this)">Show all '+rows.length+"</button>" : "")+noteMethod+noteRoute;
+updateEcaMsf();
 }
 
 function toggleEcaShowAll(btn){
@@ -1979,6 +2175,7 @@ if(!match){
 badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
 rateTypeBadge.textContent = "";
 content.innerHTML = '<div class="no-results">No rate found for this origin/destination with the current filters.</div>';
+msfPrepare(null);
 return;
 }
 const quality = match.score>=30 ? "exact" : match.score>=20 ? "partial" : "estimated";
@@ -2071,6 +2268,7 @@ ${isAllIn ?`
 </tfoot>
 </table>`;
 document.getElementById("pctAdj").value = 0;
+msfPrepare({ kind:"truck", originFac:(window._lastQuery && window._lastQuery.originFac) || document.getElementById("originFacility")?.value, truckEquip:match.equip });
 recalc();
 }
 
@@ -2095,6 +2293,7 @@ if(!boxcar && !centerbeam){
 badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
 rateTypeBadge.textContent = "";
 content.innerHTML = '<div class="no-results">No boxcar or centerbeam rates found for this origin/destination.</div>';
+msfPrepare(null);
 return;
 }
 badge.innerHTML = '<span class="match-badge match-exact">Compare Mode</span>';
@@ -2144,6 +2343,7 @@ ${m.destRR ? `<div class="truck-rail-row"><span class="truck-rail-label">Dest. r
 ${split ? `<div class="rail-route-block"><span class="truck-rail-label">Carrier split</span><div class="rail-route-val">${split}</div></div>` : ""}
 ${feesRow}
 <div class="truck-rail-row"><span class="truck-rail-label">Total Rate</span><span class="truck-rail-value">${fmt(total,cur)}</span></div>
+<div class="truck-rail-row"><span class="truck-rail-label">$/MSF</span><span class="truck-rail-value" id="${label === "Boxcar" ? "msfBox" : "msfCb"}">—</span></div>
 </div>
 </div>`;
 };
@@ -2156,6 +2356,8 @@ ${cardHtml("Boxcar", boxcar, bcCur, bcTotal)}
 ${cardHtml("Centerbeam", centerbeam, cbCur, cbTotal)}
 </div>
 ${railRoutesPanelHTML()}`;
+msfPrepare({ kind:"rail", originFac:(window._lastQuery && window._lastQuery.originFac) || document.getElementById("originFacility")?.value, boxEquip: boxcar && boxcar.equip });
+msfRefresh();
 }
 
 function fmt(n, currency){
@@ -2221,8 +2423,10 @@ setCell("adjAvgCell", `${fmt(adjAvg,currency)}<span class="currency-badge">${cur
 const avgPct = gpAvg > 0 ? ((adjAvg - gpAvg)/gpAvg)*100 : 0;
 setCell("diffAvg", fmtPct(avgPct), pctClass(avgPct));
 
-setCell("totalGP", `${fmt(gpTotal,currency)}<span class="currency-badge">${currency}</span>`);
-setCell("totalAdj", `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span>`);
+// $/MSF = total / sqft per load x 1000 (right side of the total cell).
+setCell("totalGP", `<div class="tot-flex"><span>${fmt(gpTotal,currency)}<span class="currency-badge">${currency}</span></span>${msfValHTML(gpTotal, "truck", currency, true)}</div>`);
+const _adjMsf = msfValue(adjTotal, "truck");
+setCell("totalAdj", `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span><span class="msf-mini">${_adjMsf != null ? fmt(_adjMsf,currency) : "—"} /MSF</span>`);
 setCell("totalDiff", fmtPct(totalPct), pctClass(totalPct));
 window._lastRailTotal = adjTotal;
 }
