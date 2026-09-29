@@ -1614,13 +1614,14 @@ function _titleCase(s){ return (s||"").toLowerCase().replace(/\b\w/g, ch=>ch.toU
 // panels per unit, sqft per panel].
 const MSF_TABLES = {"FH":{"name":"FORDYCE(311)-SW  /  HOSFORD(312)-SE","units":{"VAN":11,"TRUCK":12,"50":36,"52":36,"60":45,"CTR":54},"sizes":[["1/4",140,32],["3/8",94,32],["7/16",90,32],["15/32",70,32],["1/2",70,32],["19/32",63,32],["23/32",50,32],["7/8",40,32]]},"BROOKNEAL":{"name":"BROOKNEAL(514)-MA","units":{"TRUCK":11,"50":36,"52":36,"60":45},"sizes":[["1/4",140,32],["3/8",90,32],["7/16",87,32],["15/32",78,32],["1/2",70,32],["19/32",63,32],["23/32",50,32],["7/8",40,32]]},"ENGLEHART":{"name":"ENGLEHART(517)-NC/EC","units":{"TRUCK":12,"50":36,"60":45,"CTR":54},"sizes":[["3/8",100,32],["7/16",90,32],["15/32",80,32],["1/2",78,32],["5/8",63,32],["19/32",65,32],["23/32",55,32],["7/8",45,32],["1-1/8",41,32]]},"CLARENDON":{"name":"Clarendon(516)-SE","units":{"TRUCK":12,"50":52,"60":56,"CTR":54},"sizes":[["3/8",92,32],["7/16",90,32],["7/16-9",76,36],["7/16-10",68,40],["15/32",75,32],["1/2",70,32],["19/32",63,32],["23/32",50,32]]},"PLYWOOD":{"name":"Plywood","units":{"TRUCK":12,"50":52,"60":58},"sizes":[["1/4",108,32],["11/32",90,32],["3/8",90,36],["15/32",70,32],["19/32",58,32],["23/32",48,32]]}};
 const MSF_TABLE_LABELS = { FH:"Fordyce / Hosford OSB", BROOKNEAL:"Brookneal OSB", ENGLEHART:"Englehart OSB", CLARENDON:"Clarendon OSB", PLYWOOD:"Plywood" };
-// Origin (CITY,ST) -> mill table. Plywood = GP's APA plywood mills. Anything
+// Origin (CITY,ST) -> mill table (Earlton -> Englehart, Cullendale -> Fordyce/
+// Hosford per Matt). Plywood = GP's APA plywood mills. Anything
 // else (lumber, gypsum, distribution, unconfirmed panel sites) has no table:
 // Units/Load starts blank and $/MSF shows "—" until the user fills it in.
 const MSF_ORIGIN_TABLE = {
-"FORDYCE,AR":"FH", "HOSFORD,FL":"FH",
+"FORDYCE,AR":"FH", "HOSFORD,FL":"FH", "CULLENDALE,AR":"FH",
 "GLADYS,VA":"BROOKNEAL", "NARUNA,VA":"BROOKNEAL",
-"ENGLEHART,ON":"ENGLEHART",
+"ENGLEHART,ON":"ENGLEHART", "EARLTON,ON":"ENGLEHART",
 "ALCOLU,SC":"CLARENDON",
 "CAMDEN,TX":"PLYWOOD", "CORRIGAN,TX":"PLYWOOD", "DUDLEY,NC":"PLYWOOD", "GURDON,AR":"PLYWOOD",
 "MADISON,GA":"PLYWOOD", "MADISON (CPR),GA":"PLYWOOD", "PROSPERITY,SC":"PLYWOOD", "TAYLORSVILLE,MS":"PLYWOOD"
