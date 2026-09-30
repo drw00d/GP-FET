@@ -287,9 +287,15 @@ table.rail-routes-table tbody tr{cursor:pointer;}
 table.rail-routes-table tbody tr.rr-sel{background:#ecfdf5;}
 table.rail-routes-table tbody tr.rr-sel td:first-child{box-shadow:inset 3px 0 0 #16a34a;}
 .rail-route-note{margin:0 24px 12px;font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;}
+.rail-via-note{margin:0 24px 12px;font-size:12px;color:#1e3a8a;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;line-height:1.45;}
+.rail-via-note.nearest{color:#92400e;background:#fffbeb;border-color:#fde68a;}
+.rail-via-alts{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.rail-via-alt{font:inherit;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#1e293b;cursor:pointer;}
+.rail-via-alt.on{background:#1e3a8a;color:#fff;border-color:#1e3a8a;cursor:default;}
 @media (max-width:640px){
 .rail-routes{margin:0 12px 16px;}
 .rail-route-note{margin:0 12px 12px;}
+.rail-via-note{margin:0 12px 12px;}
 table.rail-routes-table thead th,table.rail-routes-table tbody td{padding:6px 8px;}
 }
 /* DOE truck fuel line */
@@ -336,6 +342,13 @@ let SHIP_TO_APPLIED = null;  // {id, entry, city, state, setCustomer} for the la
 // Rail Route picker: distinct routes (TotalRoute + destination serving railroad)
 // on file for the current origin/destination lane. selected "" = cheapest (default).
 let RAIL_ROUTE = { lane:"", options:[], selected:"" };
+// Suburb -> rail rate station fallback (rates.json rail_dest_alias / rail_geo,
+// built by rail_dest_fallback.py). KBX prices a consignee at its rail station
+// (e.g. Schilling Brothers Lumber, Mokena IL -> CHICAGO IL / CRL).
+let RAIL_DEST_ALIAS = {};   // "MOKENA,IL" -> [{to:"CHICAGO,IL,US", rr:["CRL"], names:[...]}]
+let RAIL_GEO = {};          // "CITY,ST" -> [lat, lon] (rail stations + nearby places)
+const RAIL_NEAREST_MAX_MI = 50;  // straight-line radius for the nearest-station fallback
+let RAIL_VIA = null;        // via info for the rail result on screen (null = priced at the destination itself)
 
 const RAIL_ORIGIN_LABELS = {
 "ALCOLU,SC,US": "CLARENDON / ALCOLU, SC",
@@ -508,6 +521,9 @@ for(const raw of ECA_RATES){
 ORIGIN_BUSINESS = data.origin_business || {};
 ORIGIN_DIVISION = data.origin_division || {};
 SHIP_TO = data.ship_to || {};
+RAIL_DEST_ALIAS = data.rail_dest_alias || {};
+RAIL_GEO = data.rail_geo || {};
+_RAIL_DEST_CACHE.clear();
 FSC = data.fsc || null;
 buildUI();
 buildBusinessFilterOptions();
@@ -802,7 +818,8 @@ SHIP_TO_APPLIED = { id, entry:e, city:d.city, state:d.state, setCustomer };
 if(input.value.trim().toUpperCase() !== id) input.value = id;
 const where = d.city + ", " + d.state + (e.zip ? " " + e.zip : "");
 const notes = [];
-if(d.rail) notes.push("(rail ramp; truck: " + e.city + ", " + e.state + ")");
+if(d.rail) notes.push(e.src === "kbx-rail" ? "(KBX rail consignee priced at its rail station" + (e.rr ? ", " + e.rr + "-served" : "") + "; truck: " + e.city + ", " + e.state + ")" : "(rail ramp; truck: " + e.city + ", " + e.state + ")");
+else if(e.src === "kbx-rail") notes.push(e.rail ? "(KBX rail consignee; rail: " + e.rail.city + ", " + e.rail.state + ")" : "(KBX rail consignee \u2013 city shown is its KBX rail station)");
 if(e.n > 1) notes.push("(" + e.n + " addresses on file \u2013 using most frequent/recent)");
 _setShipToMsg("hit", "\u2713 " + (e.name || id) + " \u2014 " + where, notes.join(" "));
 }
@@ -1373,9 +1390,13 @@ runRailCompare(originFac, destCity, destState, destZip, miles);
 return;
 }
 
-const match = findRate(originFac, destCity, destState, destZip, miles);
+let rq = { city:destCity, state:destState, via:null };
+if(SELECTED_MODE === "RAIL"){ refreshRailRouteOptions(); rq = resolveRailDest(originFac, destCity, destState, destZip); }
+RAIL_VIA = rq.via;
+const match = findRate(originFac, rq.city, rq.state, destZip, miles);
+if(match && rq.via) match.via = rq.via;
 displayResults(match, miles);
-renderEcaComparison(match, originFac, destZip, destCity, destState, miles);
+renderEcaComparison(match, originFac, destZip, rq.city, rq.state, miles);
 }
 
 // Rail quote: Boxcar vs Centerbeam, optionally restricted to the route picked
@@ -1383,6 +1404,10 @@ renderEcaComparison(match, originFac, destZip, destCity, destState, miles);
 // i.e. the original behaviour).
 function runRailCompare(originFac, destCity, destState, destZip, miles){
 const key = RAIL_ROUTE.selected || "";
+// No rail rates to the town itself -> price at its KBX station / nearest station (labeled).
+const rq = resolveRailDest(originFac, destCity, destState, destZip);
+RAIL_VIA = rq.via;
+destCity = rq.city; destState = rq.state;
 const boxcar = findRateByGroup(originFac, destCity, destState, destZip, "BOXCAR", key);
 const centerbeam = findRateByGroup(originFac, destCity, destState, destZip, "CENTERBEAM", key);
 displayCompareResults(boxcar, centerbeam, miles);
@@ -1391,6 +1416,144 @@ const bcT = boxcar ? (Number(boxcar.flat)||Infinity) : Infinity;
 const cbT = centerbeam ? (Number(centerbeam.flat)||Infinity) : Infinity;
 const ecaMatch = (bcT <= cbT ? boxcar : centerbeam) || boxcar || centerbeam;
 renderEcaComparison(ecaMatch, originFac, destZip, destCity, destState, miles);
+}
+
+// ---- Rail destination fallback (suburb -> rail rate station) ----
+// Rail rates are keyed by the rail STATION KBX prices at, so a consignee town
+// with no station of its own (Mokena IL -> CHICAGO IL) matched nothing. When
+// the typed city has no rail rate for this origin:
+//  1. KBX alias: a KBX consignee in that town is priced at station X
+//     (facility name "... - MOKENA IL" with DCITY CHICAGO) -> price via X.
+//  2. Otherwise the nearest station WITH a rate from this origin, within
+//     RAIL_NEAREST_MAX_MI straight-line miles -> price via it, flagged as an
+//     estimate. Nothing is ever substituted silently: the result says so.
+const _RAIL_DEST_CACHE = new Map();
+const RAIL_VIA_PICK = new Map();   // lane -> "CITY,ST" station the user clicked in the via note
+function normPlace(c){
+let s = String(c == null ? "" : c).toUpperCase().replace(/&/g, " AND ");
+s = s.replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+return s.replace(/\bSAINTE\b/g, "STE").replace(/\bSAINT\b/g, "ST").replace(/\bMOUNT\b/g, "MT").replace(/\bFORT\b/g, "FT");
+}
+function _geoMiles(a, b){
+const R = 3958.8, toR = x => x * Math.PI / 180;
+const dLa = toR(b[0] - a[0]), dLo = toR(b[1] - a[1]);
+const h = Math.sin(dLa/2) ** 2 + Math.cos(toR(a[0])) * Math.cos(toR(b[0])) * Math.sin(dLo/2) ** 2;
+return 2 * R * Math.asin(Math.sqrt(h));
+}
+function _placeGeo(city, state){ return RAIL_GEO[normPlace(city) + "," + String(state || "").trim().toUpperCase()] || null; }
+// Rail stations (boxcar/centerbeam) with a rate from this origin: "CITY,ST,CO" -> {city, state}
+function _railStationsFrom(originFac){
+const out = new Map();
+for(const r of RATES){
+if(r.mode !== "RAIL" || !r.destLoc) continue;
+const grp = railEquipGroup(r.equip);
+if(grp !== "BOXCAR" && grp !== "CENTERBEAM") continue;
+if(out.has(r.destLoc)) continue;
+const p = r.destLoc.split(",");
+const city = (p[0] || "").trim().toUpperCase(), state = (p[1] || "").trim().toUpperCase();
+if(scoreRate(r, originFac, city, state, "") < 0) continue;
+out.set(r.destLoc, { city, state });
+}
+return out;
+}
+function resolveRailDest(originFac, destCity, destState, destZip){
+const base = _resolveRailDestBase(originFac, destCity, destState, destZip);
+const pk = RAIL_VIA_PICK.get([originFac, destCity, destState].join("|"));
+if(!pk || !base.via) return base;
+const a = (base.via.alts || []).find(x => x.city + "," + x.state === pk);
+if(!a || (a.city === base.via.city && a.state === base.via.state)) return base;
+return { city:a.city, state:a.state, via:{ ...base.via, kind:"picked", city:a.city, state:a.state, mi:a.mi, rr:[], names:[], auto:{ kind:base.via.kind, city:base.via.city, state:base.via.state } } };
+}
+function _resolveRailDestBase(originFac, destCity, destState, destZip){
+const none = { city:destCity, state:destState, via:null };
+if(!originFac || !destCity || !destState) return none;
+const ck = [originFac, destCity, destState].join("|");
+if(_RAIL_DEST_CACHE.has(ck)) return _RAIL_DEST_CACHE.get(ck);
+const stations = _railStationsFrom(originFac);
+let res = none;
+const hasOwn = [...stations.values()].some(s => s.city === destCity && s.state === destState);
+// Same place, different spelling ("ST. LOUIS" vs station "ST LOUIS"): use the station, no "via".
+const same = hasOwn ? null : [...stations.values()].find(s => s.state === destState && normPlace(s.city) === normPlace(destCity));
+if(same) res = { city:same.city, state:same.state, via:null };
+else if(!hasOwn && stations.size){
+const here = _placeGeo(destCity, destState);
+const dist = s => { const g = _placeGeo(s.city, s.state); return (here && g) ? _geoMiles(here, g) : null; };
+// 1) KBX alias (consignee in this town priced at a station)
+const al = (RAIL_DEST_ALIAS[normPlace(destCity) + "," + destState] || []).filter(a => stations.has(a.to));
+if(al.length){
+const pick = al.map(a => ({ a, s:stations.get(a.to), mi:dist(stations.get(a.to)) }))
+  .sort((x, y) => (x.mi == null ? 1e9 : x.mi) - (y.mi == null ? 1e9 : y.mi))[0];
+res = { city:pick.s.city, state:pick.s.state, via:{ kind:"alias", fromCity:destCity, fromState:destState, city:pick.s.city, state:pick.s.state,
+  mi:pick.mi, rr:pick.a.rr || [], names:pick.a.names || [] } };
+}else if(here){
+// 2) nearest station with a rate from this origin, within the radius
+let best = null;
+for(const s of stations.values()){
+const mi = dist(s);
+if(mi != null && mi <= RAIL_NEAREST_MAX_MI && (!best || mi < best.mi)) best = { s, mi };
+}
+if(best) res = { city:best.s.city, state:best.s.state, via:{ kind:"nearest", fromCity:destCity, fromState:destState, city:best.s.city, state:best.s.state, mi:best.mi, rr:[], names:[] } };
+}
+// Other stations with a rate from this origin within the radius (shown in the note, click to re-price).
+if(res.via){
+const alts = [];
+if(here){
+for(const s of stations.values()){
+const mi = dist(s);
+if(mi != null && mi <= RAIL_NEAREST_MAX_MI) alts.push({ city:s.city, state:s.state, mi });
+}
+}
+if(!alts.some(a => a.city === res.via.city && a.state === res.via.state)) alts.push({ city:res.via.city, state:res.via.state, mi:res.via.mi });
+alts.sort((x, y) => (x.mi == null ? 1e9 : x.mi) - (y.mi == null ? 1e9 : y.mi));
+res.via.alts = alts.slice(0, 40);
+}
+}
+_RAIL_DEST_CACHE.set(ck, res);
+return res;
+}
+function railViaShort(v){ return v ? "priced via " + v.city + ", " + v.state : ""; }
+function railViaNoteHTML(v){
+if(!v) return "";
+const e = _escHtml;
+const miTxt = v.mi != null ? Math.round(v.mi) + " mi" : "";
+if(v.kind === "alias"){
+const who = v.names && v.names.length ? e(v.names[0]) + (v.names.length > 1 ? " (+" + (v.names.length - 1) + " more)" : "") : "a KBX consignee in " + e(v.fromCity) + ", " + e(v.fromState);
+return `<div class="rail-via-note" id="railViaNote">\ud83d\udccd <strong>Priced via ${e(v.city)}, ${e(v.state)}</strong> \u2014 no rail rate on file to ${e(v.fromCity)}, ${e(v.fromState)} itself. KBX prices ${who} at the ${e(v.city)}, ${e(v.state)} rail station${v.rr && v.rr.length ? " (" + e(v.rr.join("/")) + "-served)" : ""}${miTxt ? ", " + miTxt + " away (straight line)" : ""}.${railViaAltsHTML(v)}</div>`;
+}
+if(v.kind === "picked"){
+return `<div class="rail-via-note nearest" id="railViaNote">\u2248 <strong>Priced via ${e(v.city)}, ${e(v.state)}</strong> (station you picked) \u2014 no rail rate on file to ${e(v.fromCity)}, ${e(v.fromState)}; ${miTxt ? miTxt + " away (straight line). " : ""}Default was ${e(v.auto.city)}, ${e(v.auto.state)}. Confirm the pricing station in Raven.${railViaAltsHTML(v)}</div>`;
+}
+return `<div class="rail-via-note nearest" id="railViaNote">\u2248 <strong>Priced via ${e(v.city)}, ${e(v.state)}</strong> \u2014 no rail rate on file to ${e(v.fromCity)}, ${e(v.fromState)}; this is the nearest rail rate station from this origin, ${miTxt} away (straight line). KBX may price this consignee at a different station \u2014 confirm in Raven.${railViaAltsHTML(v)}</div>`;
+}
+// Nearby stations (within RAIL_NEAREST_MAX_MI) with their default Box / CB rate; click to price via one.
+function railViaAltsHTML(v){
+const lq = window._lastQuery;
+const alts = (v.alts || []);
+if(!lq || alts.length < 2) return "";
+const SHOW = 8;
+const items = alts.map((a, i) => {
+const bc = findRateByGroup(lq.originFac, a.city, a.state, "", "BOXCAR");
+const cb = findRateByGroup(lq.originFac, a.city, a.state, "", "CENTERBEAM");
+const cur = (bc || cb)?.currency || "USD";
+const on = a.city === v.city && a.state === v.state;
+const txt = _escHtml(a.city + ", " + a.state) + (a.mi != null ? " " + Math.round(a.mi) + " mi" : "") + " \u00b7 Box " + _fmtShort(bc ? Number(bc.flat) : null, cur) + " / CB " + _fmtShort(cb ? Number(cb.flat) : null, cur);
+const hide = (i >= SHOW && !on) ? ' data-more="1" style="display:none;"' : "";
+return on ? `<span class="rail-via-alt on">${txt}</span>` : `<button type="button" class="rail-via-alt"${hide} onclick="pickRailVia(${i})" title="Price via this station">${txt}</button>`;
+});
+const nMore = alts.length - SHOW;
+const more = nMore > 0 ? ` <button type="button" class="eca-toggle" onclick="this.parentElement.querySelectorAll('[data-more]').forEach(b=>b.style.display=b.style.display==='none'?'':'none');this.textContent=this.textContent.startsWith('Show all')?'Show nearest ${SHOW}':'Show all ${alts.length}'">Show all ${alts.length}</button>` : "";
+return `<div class="rail-via-alts">Rail rate stations within ${RAIL_NEAREST_MAX_MI} mi (click to price via one): ${items.join(" ")}${more}</div>`;
+}
+function pickRailVia(i){
+const lq = window._lastQuery;
+if(!lq) return;
+const base = _resolveRailDestBase(lq.originFac, lq.destCity, lq.destState, lq.destZip);
+const a = base.via && (base.via.alts || [])[i];
+if(!a) return;
+RAIL_VIA_PICK.set([lq.originFac, lq.destCity, lq.destState].join("|"), a.city + "," + a.state);
+RAIL_ROUTE.lane = "";  // force the Route dropdown to rebuild for the new station
+refreshRailRouteOptions();
+runRailCompare(lq.originFac, lq.destCity, lq.destState, lq.destZip, currentCompareMatches ? currentCompareMatches.miles : null);
 }
 
 // ---- Rail Route picker ----
@@ -1464,7 +1627,8 @@ wrap.hidden = !isRail;
 if(!isRail) return;
 const q = _railLaneFromForm();
 if(q.lane && q.lane === RAIL_ROUTE.lane) return;  // same lane: keep list + selection
-RAIL_ROUTE = { lane:q.lane, options:q.lane ? getRailRouteOptions(q.originFac, q.destCity, q.destState, q.destZip) : [], selected:"" };
+const rq = q.lane ? resolveRailDest(q.originFac, q.destCity, q.destState, q.destZip) : { city:q.destCity, state:q.destState, via:null };
+RAIL_ROUTE = { lane:q.lane, options:q.lane ? getRailRouteOptions(q.originFac, rq.city, rq.state, q.destZip) : [], selected:"", via:rq.via };
 const opt = (value, text) => { const o = document.createElement("option"); o.value = value; o.textContent = text; return o; };
 const frag = document.createDocumentFragment();
 if(!q.lane){
@@ -1472,8 +1636,8 @@ frag.appendChild(opt("", "Enter origin + destination"));
 }else if(!RAIL_ROUTE.options.length){
 frag.appendChild(opt("", "No rail routes on file"));
 }else{
-const bc = findRateByGroup(q.originFac, q.destCity, q.destState, q.destZip, "BOXCAR");
-const cb = findRateByGroup(q.originFac, q.destCity, q.destState, q.destZip, "CENTERBEAM");
+const bc = findRateByGroup(q.originFac, rq.city, rq.state, q.destZip, "BOXCAR");
+const cb = findRateByGroup(q.originFac, rq.city, rq.state, q.destZip, "CENTERBEAM");
 const cur = (bc || cb)?.currency || "USD";
 frag.appendChild(opt("", "Cheapest (default) \u2014 Box " + _fmtShort(bc ? Number(bc.flat) : null, cur) + " / CB " + _fmtShort(cb ? Number(cb.flat) : null, cur)));
 RAIL_ROUTE.options.forEach((o, i) => {
@@ -1487,7 +1651,7 @@ sel.title = sel.options[0] ? sel.options[0].textContent : "";
 if(msg){
 const n = RAIL_ROUTE.options.length;
 msg.className = "shipto-msg";
-msg.textContent = !q.lane ? "" : (n ? n + " route" + (n > 1 ? "s" : "") + " on file for this lane" + (n > 1 ? " \u2013 pick one to re-quote" : "") : "");
+msg.textContent = !q.lane ? "" : (n ? n + " route" + (n > 1 ? "s" : "") + " on file for this lane" + (RAIL_ROUTE.via ? " (" + railViaShort(RAIL_ROUTE.via) + ")" : "") + (n > 1 ? " \u2013 pick one to re-quote" : "") : "");
 }
 }
 function onRailRouteChange(){
@@ -2216,7 +2380,7 @@ content.innerHTML = '<div class="no-results">No rate found for this origin/desti
 msfPrepare(null);
 return;
 }
-const quality = match.score>=30 ? "exact" : match.score>=20 ? "partial" : "estimated";
+const quality = (match.via && match.via.kind !== "alias") ? "partial" : match.score>=30 ? "exact" : match.score>=20 ? "partial" : "estimated";
 badge.innerHTML = quality==="exact"
 ? '<span class="match-badge match-exact">✓ Exact Match</span>'
 : quality==="partial"
@@ -2228,7 +2392,7 @@ const isBTrain = match.mode === "TRUCK" && isBTrainEquip(match.equip);
 // B-Train is a flat, all-in lane rate just like rail (no separate fuel line).
 const isAllIn = isRail || isBTrain || Boolean(match.customer);
 const equipLabel = match.equip ? ` &nbsp;·&nbsp; <span style="font-size:11px;color:#475569;font-weight:600;">${match.equip}</span>` : "";
-rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}${match.customer ? " · " + match.customer : ""}</span>`;
+rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}${match.customer ? " · " + match.customer : ""}${match.via ? " · " + _escHtml(railViaShort(match.via)) : ""}</span>`;
 const currency = match.currency || "USD";
 const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
 const minCharge = Number(match.minCharge)||0;
@@ -2256,7 +2420,7 @@ const milesNote = milesFailed
 : (isMI && miles!=null)
 ? ' <span style="font-size:11px;color:#16a34a;font-style:italic;">via Google Maps</span>'
 : '';
-content.innerHTML = `
+content.innerHTML = `${railViaNoteHTML(match.via)}
 <table id="rateTable" class="no-adjust">
 <thead>
 <tr><th>Item</th><th>GP Rate</th><th>Adjust Rate</th><th>% Difference</th></tr>
@@ -2334,9 +2498,9 @@ content.innerHTML = '<div class="no-results">No boxcar or centerbeam rates found
 msfPrepare(null);
 return;
 }
-badge.innerHTML = '<span class="match-badge match-exact">Compare Mode</span>';
+badge.innerHTML = RAIL_VIA && RAIL_VIA.kind !== "alias" ? '<span class="match-badge match-partial">\u2248 Compare Mode (via nearby station)</span>' : '<span class="match-badge match-exact">Compare Mode</span>';
 const selRoute = RAIL_ROUTE.selected ? RAIL_ROUTE.options.find(o => o.key === RAIL_ROUTE.selected) : null;
-rateTypeBadge.innerHTML = '<span style="font-size:12px;color:#1e293b;margin-left:4px;">Boxcar vs Centerbeam' + (selRoute ? ' \u00b7 ' + _escHtml(railRouteLabel(selRoute)) : '') + '</span>';
+rateTypeBadge.innerHTML = '<span style="font-size:12px;color:#1e293b;margin-left:4px;">Boxcar vs Centerbeam' + (selRoute ? ' \u00b7 ' + _escHtml(railRouteLabel(selRoute)) : '') + (RAIL_VIA ? ' \u00b7 ' + _escHtml(railViaShort(RAIL_VIA)) : '') + '</span>';
 let routeNote = "";
 if(selRoute && RAIL_ROUTE.options.length){
 const cheapest = RAIL_ROUTE.options[0];
@@ -2387,6 +2551,7 @@ ${feesRow}
 };
 
 content.innerHTML = `
+${railViaNoteHTML(RAIL_VIA)}
 ${routeNote}
 ${winnerNote}
 <div class="compare-grid">
@@ -2486,6 +2651,7 @@ if(_cf && _cf.value){ _cf.value = ""; SELECTED_CUSTOMER = ""; }
 }
 SHIP_TO_APPLIED = null;
 _setShipToMsg("", "");
+RAIL_VIA_PICK.clear();
 LAST_DEST_ZIPS = [];
 hideZipPicker();
 clearResultsOnly();
