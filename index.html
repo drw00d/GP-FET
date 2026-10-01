@@ -289,6 +289,7 @@ table.rail-routes-table tbody tr.rr-sel td:first-child{box-shadow:inset 3px 0 0 
 .rail-route-note{margin:0 24px 12px;font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;}
 .rail-via-note{margin:0 24px 12px;font-size:12px;color:#1e3a8a;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;line-height:1.45;}
 .rail-equip-note{margin:0 24px 12px;font-size:12px;color:#334155;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;}
+.rail-equip-note.fallback{color:#92400e;background:#fffbeb;border-color:#fde68a;font-weight:600;}
 .compare-grid.single{grid-template-columns:minmax(0,1fr);max-width:560px;}
 .rail-via-note.nearest{color:#92400e;background:#fffbeb;border-color:#fde68a;}
 .rail-via-alts{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
@@ -526,6 +527,7 @@ SHIP_TO = data.ship_to || {};
 RAIL_DEST_ALIAS = data.rail_dest_alias || {};
 RAIL_GEO = data.rail_geo || {};
 _RAIL_DEST_CACHE.clear();
+_RAIL_PRIMARY_CACHE.clear();
 FSC = data.fsc || null;
 buildUI();
 buildBusinessFilterOptions();
@@ -1414,7 +1416,7 @@ destCity = rq.city; destState = rq.state;
 // One pick per equipment group; groups this mill doesn't ship come back null.
 const found = {};
 for(const g of RAIL_GROUPS_ALL) found[g] = findRateByGroup(originFac, destCity, destState, destZip, g, key);
-displayCompareResults(found, miles, originFac);
+displayCompareResults(found, miles, originFac, railLaneGroups(originFac, destCity, destState, destZip));
 // ECA yardstick = the cheapest allowed equipment (what GP would most likely quote).
 let ecaMatch = null;
 for(const g of RAIL_GROUPS_ALL){
@@ -1453,7 +1455,7 @@ const out = new Map();
 for(const r of RATES){
 if(r.mode !== "RAIL" || !r.destLoc) continue;
 if(out.has(r.destLoc)) continue;
-if(!railGroupAllowed(originFac, railEquipGroup(r.equip))) continue;
+if(!railStationGroups(originFac).includes(railEquipGroup(r.equip))) continue;
 const p = r.destLoc.split(",");
 const city = (p[0] || "").trim().toUpperCase(), state = (p[1] || "").trim().toUpperCase();
 if(scoreRate(r, originFac, city, state, "") < 0) continue;
@@ -1519,7 +1521,7 @@ return res;
 // "boxcar" / "boxcar or centerbeam" for the mill on screen ("rail" when it has no equipment rule).
 function _railRatePhrase(){
 const o = (window._lastQuery && window._lastQuery.originFac) || "";
-return railMillRule(o) ? railAllowedGroups(o).map(g => RAIL_GROUP_LABEL[g].toLowerCase()).join(" or ") : "rail";
+return railMillRule(o) ? railStationGroups(o).map(g => RAIL_GROUP_LABEL[g].toLowerCase()).join(" or ") : "rail";
 }
 function railViaShort(v){ return v ? "priced via " + v.city + ", " + v.state : ""; }
 function railViaNoteHTML(v){
@@ -1546,7 +1548,7 @@ const f = {}, vals = {};
 for(const g of RAIL_GROUPS_ALL){ f[g] = findRateByGroup(lq.originFac, a.city, a.state, "", g); vals[g] = f[g] ? Number(f[g].flat) : null; }
 const cur = (f.BOXCAR || f.CENTERBEAM || f.FLATCAR)?.currency || "USD";
 const on = a.city === v.city && a.state === v.state;
-const txt = _escHtml(a.city + ", " + a.state) + (a.mi != null ? " " + Math.round(a.mi) + " mi" : "") + " \u00b7 " + railValsLabel(vals, railCardGroups(lq.originFac, f), cur);
+const txt = _escHtml(a.city + ", " + a.state) + (a.mi != null ? " " + Math.round(a.mi) + " mi" : "") + " \u00b7 " + railValsLabel(vals, railCardGroups(lq.originFac, f, railLaneGroups(lq.originFac, a.city, a.state, "")), cur);
 const hide = (i >= SHOW && !on) ? ' data-more="1" style="display:none;"' : "";
 return on ? `<span class="rail-via-alt on">${txt}</span>` : `<button type="button" class="rail-via-alt"${hide} onclick="pickRailVia(${i})" title="Price via this station">${txt}</button>`;
 });
@@ -1591,7 +1593,7 @@ return q;
 // exactly like findRateByGroup (best score, then equipment priority, then price).
 function getRailRouteOptions(originFac, destCity, destState, destZip){
 const groups = new Map();
-const allowed = railAllowedGroups(originFac);
+const allowed = railLaneGroups(originFac, destCity, destState, destZip).groups;
 let top = -1;
 for(const r of RATES){
 if(r.mode !== "RAIL") continue;
@@ -1629,9 +1631,9 @@ opts.sort((a,b) => a.best - b.best || a.route.localeCompare(b.route) || a.destRR
 return opts;
 }
 // Groups shown for a lane's Route options (flat column for unlisted mills only if some route has one).
-function railOptionGroups(originFac, opts){
+function railOptionGroups(originFac, opts, lane){
 const anyFlat = (opts || []).some(o => o.vals && o.vals.FLATCAR != null);
-return railCardGroups(originFac, anyFlat ? { FLATCAR:true } : {});
+return railCardGroups(originFac, anyFlat ? { FLATCAR:true } : {}, lane);
 }
 let _railRouteTimer = null;
 function scheduleRailRouteRefresh(){
@@ -1649,7 +1651,8 @@ if(!isRail) return;
 const q = _railLaneFromForm();
 if(q.lane && q.lane === RAIL_ROUTE.lane) return;  // same lane: keep list + selection
 const rq = q.lane ? resolveRailDest(q.originFac, q.destCity, q.destState, q.destZip) : { city:q.destCity, state:q.destState, via:null };
-RAIL_ROUTE = { lane:q.lane, options:q.lane ? getRailRouteOptions(q.originFac, rq.city, rq.state, q.destZip) : [], selected:"", via:rq.via };
+RAIL_ROUTE = { lane:q.lane, options:q.lane ? getRailRouteOptions(q.originFac, rq.city, rq.state, q.destZip) : [], selected:"", via:rq.via,
+  laneGroups:q.lane ? railLaneGroups(q.originFac, rq.city, rq.state, q.destZip) : null };
 const opt = (value, text) => { const o = document.createElement("option"); o.value = value; o.textContent = text; return o; };
 const frag = document.createDocumentFragment();
 if(!q.lane){
@@ -1660,7 +1663,7 @@ frag.appendChild(opt("", "No rail routes on file"));
 const f = {}, vals = {};
 for(const g of RAIL_GROUPS_ALL){ f[g] = findRateByGroup(q.originFac, rq.city, rq.state, q.destZip, g); vals[g] = f[g] ? Number(f[g].flat) : null; }
 const cur = (f.BOXCAR || f.CENTERBEAM || f.FLATCAR)?.currency || "USD";
-const og = railOptionGroups(q.originFac, RAIL_ROUTE.options);
+const og = railOptionGroups(q.originFac, RAIL_ROUTE.options, RAIL_ROUTE.laneGroups);
 frag.appendChild(opt("", "Cheapest (default) \u2014 " + railValsLabel(vals, og, cur)));
 RAIL_ROUTE.options.forEach((o, i) => {
 frag.appendChild(opt(o.key, (i + 1) + ". " + railRouteLabel(o) + " \u2014 " + railValsLabel(o.vals, og, o.currency)));
@@ -1701,7 +1704,7 @@ if(!lq || !opts.length) return "";
 const lastLane = [lq.originFac, lq.destCity, lq.destState, lq.destCity ? "" : lq.destZip].join("|");
 if(lastLane !== RAIL_ROUTE.lane) return "";
 const SHOW = 5;
-const og = railOptionGroups(lq.originFac, opts);
+const og = railOptionGroups(lq.originFac, opts, RAIL_ROUTE.laneGroups);
 const row = (o, i) => `<tr class="${o.key === RAIL_ROUTE.selected ? "rr-sel" : ""}${i >= SHOW ? " rr-more" : ""}" ${i >= SHOW ? 'style="display:none;"' : ""} onclick="pickRailRoute(${i})" title="Quote this route">
 <td>${i + 1}</td><td class="rr-route">${_escHtml(o.route ? _routeArrows(o.route) : "(route not listed)")}</td><td>${_escHtml(o.destRR || "\u2014")}</td>
 ${og.map(g => `<td class="mono">${_fmtShort(o.vals[g], o.currency)}</td>`).join("")}</tr>`;
@@ -2241,7 +2244,9 @@ const RAIL_EQUIP_RULES = {
 OSB:           { label:"OSB mill",               groups:["BOXCAR", "CENTERBEAM"] },
 PLYWOOD:       { label:"Plywood mill",           groups:["BOXCAR"] },
 MTJEWETT:      { label:"Mt Jewett",              groups:["BOXCAR"] },
-PARTICLEBOARD: { label:"Particleboard mill",     groups:["BOXCAR", "FLATCAR"] },
+PARTICLEBOARD: { label:"Particleboard mill",     groups:["BOXCAR", "FLATCAR"],
+                 // Matt 10/1: a Diboll lane with no boxcar AND no flatcar rate falls back to centerbeam.
+                 fallback:["CENTERBEAM"], fallbackNote:"Diboll: no boxcar/flatcar rate on file, quoting centerbeam" },
 LUMBER:        { label:"Lumber mill",            groups:["CENTERBEAM"] }
 };
 const RAIL_MILL_RULE = {
@@ -2264,19 +2269,50 @@ const r = railMillRule(originFac);
 return r ? RAIL_EQUIP_RULES[r].groups : RAIL_GROUPS_ALL;
 }
 function railGroupAllowed(originFac, grp){ return railAllowedGroups(originFac).includes(grp); }
-// Cards to show: the mill's groups; unlisted mills keep Box + CB (+ Flat only when a flat rate exists).
-function railCardGroups(originFac, found){
-if(railMillRule(originFac)) return railAllowedGroups(originFac);
+// Every group a mill can ever be quoted in (its groups + fallback groups) - used to pick candidate stations.
+function railStationGroups(originFac){
+const r = railMillRule(originFac);
+return r ? RAIL_EQUIP_RULES[r].groups.concat(RAIL_EQUIP_RULES[r].fallback || []) : RAIL_GROUPS_ALL;
+}
+// Lane-level groups: the mill's groups, or its fallback groups when the lane has
+// no rate in ANY of the mill's groups (Diboll: no box and no flat -> centerbeam).
+// Box/flat always win when either exists. {groups, fallback:true|false}
+const _RAIL_PRIMARY_CACHE = new Map();
+function _railPrimaryExists(originFac, destCity, destState, destZip, groups){
+const k = [originFac, destCity, destState, destCity ? "" : destZip].join("|");
+if(_RAIL_PRIMARY_CACHE.has(k)) return _RAIL_PRIMARY_CACHE.get(k);
+let hit = false;
+for(const r of RATES){
+if(r.mode !== "RAIL" || !groups.includes(railEquipGroup(r.equip))) continue;
+if(scoreRate(r, originFac, destCity, destState, destZip) >= 0){ hit = true; break; }
+}
+_RAIL_PRIMARY_CACHE.set(k, hit);
+return hit;
+}
+function railLaneGroups(originFac, destCity, destState, destZip){
+const r = railMillRule(originFac);
+if(!r) return { groups:RAIL_GROUPS_ALL, fallback:false };
+const rule = RAIL_EQUIP_RULES[r];
+const hasDest = !!((destCity && destState) || destZip);
+if(rule.fallback && hasDest && !_railPrimaryExists(originFac, destCity, destState, destZip, rule.groups)){
+return { groups:rule.fallback, fallback:true };
+}
+return { groups:rule.groups, fallback:false };
+}
+// Cards to show: the lane's groups; unlisted mills keep Box + CB (+ Flat only when a flat rate exists).
+function railCardGroups(originFac, found, lane){
+if(railMillRule(originFac)) return lane ? lane.groups : railAllowedGroups(originFac);
 return ["BOXCAR", "CENTERBEAM"].concat(found && found.FLATCAR ? ["FLATCAR"] : []);
 }
 // "Box $7,629 / CB $6,933" for the groups shown.
 function railValsLabel(vals, groups, cur){
 return groups.map(g => RAIL_GROUP_SHORT[g] + " " + _fmtShort(vals[g] == null ? null : vals[g], cur)).join(" / ");
 }
-function railRuleNoteHTML(originFac){
+function railRuleNoteHTML(originFac, lane){
 const r = railMillRule(originFac);
 if(!r) return "";
 const rule = RAIL_EQUIP_RULES[r];
+if(lane && lane.fallback) return `<div class="rail-equip-note fallback" id="railEquipNote">\u26a0 ${_escHtml(rule.fallbackNote || (rule.label + ": no " + rule.groups.map(g => RAIL_GROUP_LABEL[g].toLowerCase()).join("/") + " rate on file, quoting " + rule.fallback.map(g => RAIL_GROUP_LABEL[g].toLowerCase()).join("/")))}.</div>`;
 const shown = rule.groups.map(g => RAIL_GROUP_LABEL[g]).join(" + ");
 const off = RAIL_GROUPS_ALL.filter(g => !rule.groups.includes(g)).map(g => RAIL_GROUP_LABEL[g].toLowerCase());
 return `<div class="rail-equip-note" id="railEquipNote">${_escHtml(rule.label)}: quoting ${_escHtml(shown)}${rule.groups.length === 1 ? " only" : ""}${off.length ? " (" + _escHtml(off.join(" / ")) + " not quoted)" : ""}.</div>`;
@@ -2355,7 +2391,7 @@ const grp = railEquipGroup(r.equip);
 if(grp !== SELECTED_RAIL_EQ) continue;
 }
 if(SELECTED_MODE==="TRUCK" && !truckEquipMatches(r)) continue;
-if(SELECTED_MODE==="RAIL" && !railGroupAllowed(originFac, railEquipGroup(r.equip))) continue;
+if(SELECTED_MODE==="RAIL" && !railLaneGroups(originFac, destCity, destState, destZip).groups.includes(railEquipGroup(r.equip))) continue;
 const scored = scoreRate(r, originFac, destCity, destState, destZip);
 if(scored < 0) continue;
 if(!rateMatchesBand(r, miles)) continue;
@@ -2381,7 +2417,7 @@ return bestScore >= 0 ? best : null;
 }
 
 function findRateByGroup(originFac, destCity, destState, destZip, group, routeKey){
-if(!railGroupAllowed(originFac, group)) return null;  // equipment this mill doesn't ship
+if(!railLaneGroups(originFac, destCity, destState, destZip).groups.includes(group)) return null;  // equipment this mill doesn't ship (on this lane)
 let best = null;
 let bestScore = -1;
 let bestPriority = 999;
@@ -2582,10 +2618,10 @@ function _routeArrows(route){
 return route ? String(route).split("-").join(" → ") : "";
 }
 
-function displayCompareResults(found, miles, originFac){
+function displayCompareResults(found, miles, originFac, lane){
 found = found || {};
 originFac = originFac || (window._lastQuery && window._lastQuery.originFac) || document.getElementById("originFacility")?.value || "";
-const groups = railCardGroups(originFac, found);
+const groups = railCardGroups(originFac, found, lane);
 const boxcar = found.BOXCAR || null, centerbeam = found.CENTERBEAM || null, flatcar = found.FLATCAR || null;
 currentMatch = null;
 currentCompareMatches = { boxcar, centerbeam, flatcar, groups, miles };
@@ -2597,13 +2633,13 @@ const groupNames = groups.map(g => RAIL_GROUP_LABEL[g]);
 if(!groups.some(g => found[g])){
 badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
 rateTypeBadge.textContent = "";
-content.innerHTML = railRuleNoteHTML(originFac) + '<div class="no-results">No ' + _escHtml(groupNames.join(" or ").toLowerCase()) + ' rates found for this origin/destination.</div>';
+content.innerHTML = railRuleNoteHTML(originFac, lane) + '<div class="no-results">No ' + _escHtml(groupNames.join(" or ").toLowerCase()) + ' rates found for this origin/destination.</div>';
 msfPrepare(null);
 return;
 }
 badge.innerHTML = RAIL_VIA && RAIL_VIA.kind !== "alias" ? '<span class="match-badge match-partial">\u2248 Compare Mode (via nearby station)</span>' : '<span class="match-badge match-exact">Compare Mode</span>';
 const selRoute = RAIL_ROUTE.selected ? RAIL_ROUTE.options.find(o => o.key === RAIL_ROUTE.selected) : null;
-rateTypeBadge.innerHTML = '<span style="font-size:12px;color:#1e293b;margin-left:4px;">' + _escHtml(groups.length > 1 ? groupNames.join(" vs ") : groupNames[0] + " only") + (selRoute ? ' \u00b7 ' + _escHtml(railRouteLabel(selRoute)) : '') + (RAIL_VIA ? ' \u00b7 ' + _escHtml(railViaShort(RAIL_VIA)) : '') + '</span>';
+rateTypeBadge.innerHTML = '<span style="font-size:12px;color:#1e293b;margin-left:4px;">' + _escHtml(groups.length > 1 ? groupNames.join(" vs ") : groupNames[0] + (lane && lane.fallback ? " (fallback)" : " only")) + (selRoute ? ' \u00b7 ' + _escHtml(railRouteLabel(selRoute)) : '') + (RAIL_VIA ? ' \u00b7 ' + _escHtml(railViaShort(RAIL_VIA)) : '') + '</span>';
 let routeNote = "";
 if(selRoute && RAIL_ROUTE.options.length){
 const cheapest = RAIL_ROUTE.options[0];
@@ -2655,7 +2691,7 @@ ${feesRow}
 
 content.innerHTML = `
 ${railViaNoteHTML(RAIL_VIA)}
-${railRuleNoteHTML(originFac)}
+${railRuleNoteHTML(originFac, lane)}
 ${routeNote}
 ${winnerNote}
 <div class="compare-grid${groups.length === 1 ? " single" : ""}">
