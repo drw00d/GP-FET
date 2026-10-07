@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -313,12 +313,12 @@ table.rail-routes-table thead th,table.rail-routes-table tbody td{padding:6px 8p
 </head>
 <body>
 <div class="header">
-<div class="header-icon">ðŸšš</div>
+<div class="header-icon">🚚</div>
 MattGPT Freight Estimate Tool
-<span class="data-status" id="dataStatus">Loading ratesâ€¦</span>
+<span class="data-status" id="dataStatus">Loading rates…</span>
 </div>
 <div class="container" id="appContainer">
-<div class="card"><div class="card-body"><div class="loading-overlay">Loading rate data, please waitâ€¦</div></div></div>
+<div class="card"><div class="card-body"><div class="loading-overlay">Loading rate data, please wait…</div></div></div>
 </div>
 <script>
 const GMAPS_KEY = "AIzaSyDwShZ5qQHLKEL3kmNyUnrtx08EQZqsIpg";
@@ -545,7 +545,7 @@ loadGoogleMapsJS().then(()=>initDestinationAutocomplete()).catch(()=>{});
 }catch(e){
 document.getElementById("appContainer").innerHTML =
 '<div class="card"><div class="card-body"><div class="load-error">' +
-'âš ï¸ Could not load the rate data (rates.json.gz). Try a hard refresh; if it persists, the data file may be missing or the browser too old.<br><small>' +
+'⚠️ Could not load the rate data (rates.json.gz). Try a hard refresh; if it persists, the data file may be missing or the browser too old.<br><small>' +
 e.message + '</small></div></div></div>';
 document.getElementById("dataStatus").textContent = "Load failed";
 }
@@ -565,8 +565,8 @@ document.getElementById("appContainer").innerHTML = `
 <div class="field fg-mode" style="align-items:flex-start;">
 <label>Equipment Mode</label>
 <div class="seg">
-<button id="modeTruck" class="${SELECTED_MODE==="TRUCK"?"active":""}" onclick="setMode('TRUCK')">ðŸšš Truck</button>
-<button id="modeRail" class="${SELECTED_MODE==="RAIL"?"active":""}" onclick="setMode('RAIL')">ðŸš‚ Rail</button>
+<button id="modeTruck" class="${SELECTED_MODE==="TRUCK"?"active":""}" onclick="setMode('TRUCK')">🚚 Truck</button>
+<button id="modeRail" class="${SELECTED_MODE==="RAIL"?"active":""}" onclick="setMode('RAIL')">🚂 Rail</button>
 </div>
 </div>
 <div class="field fg-cust">
@@ -664,7 +664,7 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <span class="adj-hint">Positive = markup &nbsp;|&nbsp; Negative = discount &nbsp;|&nbsp; linehaul only (fuel unchanged)</span>
 </div>
 <div class="msf-panel" id="msfPanel" hidden>
-<label for="msfTable" title="$ per thousand square feet: total freight Ã· sqft per load Ã— 1000 (actual sqft, not 3/8 basis)">$/MSF</label>
+<label for="msfTable" title="$ per thousand square feet: total freight ÷ sqft per load × 1000 (actual sqft, not 3/8 basis)">$/MSF</label>
 <select id="msfTable" onchange="onMsfTableChange()" title="Mill loading table (Rate Calculator)"></select>
 <span class="msf-f"><label for="msfThick">Thickness</label><select id="msfThick" onchange="onMsfChange()"></select></span>
 <span class="msf-f" id="msfTruckWrap"><label for="msfUnitsTruck">Units/Load</label><input type="number" id="msfUnitsTruck" min="0" step="1" oninput="onMsfChange()"></span>
@@ -1112,7 +1112,7 @@ function _renderDestPicker(items){
     if(it.kind === "sheet"){
       return `<div class="zip-item" data-i="${i}"><span style="display:inline-flex;align-items:center;gap:6px;"><strong>${it.city}</strong>, ${it.state} <span style="color:var(--text-muted);font-size:11px;">(${it.note || "rail destination"})</span></span></div>`;
     }
-    return `<div class="zip-item" data-i="${i}">ðŸ“ ${it.label}</div>`;
+    return `<div class="zip-item" data-i="${i}">📍 ${it.label}</div>`;
   }).join("");
   picker.addEventListener("mousedown",(e)=>{
     const row = e.target.closest(".zip-item");
@@ -1378,7 +1378,7 @@ const _ecaCard = document.getElementById("ecaCard"); if(_ecaCard) _ecaCard.style
 
 const btn = document.querySelector(".btn-primary");
 const origText = btn.textContent;
-btn.textContent = "Calculatingâ€¦";
+btn.textContent = "Calculating…";
 btn.disabled = true;
 
 const originZip = document.getElementById("originZip").value.trim();
@@ -1822,7 +1822,7 @@ const MSF_TABLE_LABELS = { FH:"Fordyce / Hosford OSB", BROOKNEAL:"Brookneal OSB"
 // Origin (CITY,ST) -> mill table (Earlton -> Englehart, Cullendale -> Fordyce/
 // Hosford per Matt). Plywood = GP's APA plywood mills. Anything
 // else (lumber, gypsum, distribution, unconfirmed panel sites) has no table:
-// Units/Load starts blank and $/MSF shows "â€”" until the user fills it in.
+// Units/Load starts blank and $/MSF shows "—" until the user fills it in.
 const MSF_ORIGIN_TABLE = {
 "FORDYCE,AR":"FH", "HOSFORD,FL":"FH", "CULLENDALE,AR":"FH",
 "GLADYS,VA":"BROOKNEAL", "NARUNA,VA":"BROOKNEAL",
@@ -1862,7 +1862,7 @@ return "";
 function _msfFillTableSelect(){
 const sel = document.getElementById("msfTable"); if(!sel) return;
 const auto = MSF_ORIGIN_TABLE[MSF.origin] || "";
-let html = `<option value="">${auto ? "â€” none â€”" : "No table for this origin"}</option>`;
+let html = `<option value="">${auto ? "— none —" : "No table for this origin"}</option>`;
 for(const k of Object.keys(MSF_TABLES)) html += `<option value="${k}">${MSF_TABLE_LABELS[k] || k}${k === auto ? " (this mill)" : ""}</option>`;
 sel.innerHTML = html;
 sel.value = MSF.table;
@@ -1870,7 +1870,7 @@ sel.value = MSF.table;
 function _msfFillThickSelect(){
 const sel = document.getElementById("msfThick"); if(!sel) return;
 const t = MSF_TABLES[MSF.table];
-if(!t){ sel.innerHTML = '<option value="">â€”</option>'; sel.disabled = true; MSF.thick = ""; return; }
+if(!t){ sel.innerHTML = '<option value="">—</option>'; sel.disabled = true; MSF.thick = ""; return; }
 sel.disabled = false;
 sel.innerHTML = t.sizes.map(z=>`<option value="${z[0]}">${z[0]}"</option>`).join("");
 if(!t.sizes.some(z=>z[0] === MSF.thick)) MSF.thick = _msfDefaultThick(MSF.table);
@@ -1922,7 +1922,7 @@ _msfHint();
 function _msfHint(){
 const h = document.getElementById("msfHint"); if(!h) return;
 const auto = MSF_ORIGIN_TABLE[MSF.origin] || "";
-if(!MSF.table) h.textContent = "No loading table for this origin â€” pick a mill table and enter units/load.";
+if(!MSF.table) h.textContent = "No loading table for this origin — pick a mill table and enter units/load.";
 else if(MSF.table !== auto) h.textContent = "Using " + (MSF_TABLE_LABELS[MSF.table]||MSF.table) + " table (not this origin's default).";
 else h.textContent = "";
 }
@@ -1954,11 +1954,11 @@ return (q && total != null && isFinite(total) && total > 0) ? total / q.sqft * 1
 function msfSubtitle(kind){
 const q = msfSqft(kind);
 if(!q) return MSF_TABLES[MSF.table] ? "enter Units/Load" : "no loading table";
-return `${q.thick}" Â· ${q.units} units Ã— ${q.pcs} pcs${q.per !== 32 ? " Ã— " + q.per + " sf" : ""} Â· ${q.sqft.toLocaleString("en-US")} sqft`;
+return `${q.thick}" · ${q.units} units × ${q.pcs} pcs${q.per !== 32 ? " × " + q.per + " sf" : ""} · ${q.sqft.toLocaleString("en-US")} sqft`;
 }
 function msfValHTML(total, kind, currency, withSub){
 const v = msfValue(total, kind);
-return `<span class="msf-val">${v != null ? fmt(v, currency) : "â€”"}<span class="msf-unit">/MSF</span>${withSub ? `<span class="msf-sub">${msfSubtitle(kind)}</span>` : ""}</span>`;
+return `<span class="msf-val">${v != null ? fmt(v, currency) : "—"}<span class="msf-unit">/MSF</span>${withSub ? `<span class="msf-sub">${msfSubtitle(kind)}</span>` : ""}</span>`;
 }
 // Re-render every $/MSF on screen (quote total, rail cards, competitor table).
 function msfRefresh(){
@@ -1976,7 +1976,7 @@ function updateEcaMsf(){
 const kind = MSF.ecaKind || "truck";
 document.querySelectorAll("#ecaContent .eca-msf[data-est]").forEach(td=>{
   const v = msfValue(Number(td.dataset.est), kind);
-  td.textContent = v != null ? fmt(v, td.dataset.cur || "USD") : "â€”";
+  td.textContent = v != null ? fmt(v, td.dataset.cur || "USD") : "—";
 });
 const vs = document.getElementById("ecaVsGp");
 if(vs && vs.dataset.total){
@@ -2018,14 +2018,14 @@ function fscSourceLabel(currency){
 if(!FSC) return "";
 if(_isCAD(currency)){
   const fx = fscUsdCad();
-  return "DOE $" + Number(FSC.doe).toFixed(3) + " wk " + fscWeekLabel() + (fx != null ? " Ã— USD/CAD " + fx.toFixed(4) + "x" : "");
+  return "DOE $" + Number(FSC.doe).toFixed(3) + " wk " + fscWeekLabel() + (fx != null ? " × USD/CAD " + fx.toFixed(4) + "x" : "");
 }
 return "DOE $" + Number(FSC.doe).toFixed(3) + ", wk " + fscWeekLabel();
 }
 // Why fuel can't be priced (DOE or, on C$ lanes, the exchange rate missing).
 function fscMissingNote(currency){
-if(fscPerMile() == null) return "DOE fuel price not loaded â€” total excludes fuel";
-if(_isCAD(currency) && fscUsdCad() == null) return "USD/CAD rate not loaded â€” can't convert fuel to C$; total excludes fuel";
+if(fscPerMile() == null) return "DOE fuel price not loaded — total excludes fuel";
+if(_isCAD(currency) && fscUsdCad() == null) return "USD/CAD rate not loaded — can't convert fuel to C$; total excludes fuel";
 return "";
 }
 // Fuel for a truck move of `miles`, in the lane's currency (0 when miles, the
@@ -2044,9 +2044,9 @@ return Math.max(rate * m, minCharge) + truckFuelFor(m, match.currency);
 
 // Competitor (ECA) estimate: your same freight logic, run from each linked
 // competitor's own location to the destination.
-//   TRUCK: standard per-mile lanes â€” apply GP's per-mile rate + DOE fuel $/mi
+//   TRUCK: standard per-mile lanes — apply GP's per-mile rate + DOE fuel $/mi
 //          over the competitor's drive distance (B-Train flat lanes are skipped).
-//   RAIL:  all-in flat lanes â€” derive GP's implied $/mi (flat total Ã· GP miles)
+//   RAIL:  all-in flat lanes — derive GP's implied $/mi (flat total ÷ GP miles)
 //          and apply it over the competitor's distance (fuel already included,
 //          so no separate fuel line). Needs GP Google miles to set the yardstick.
 async function renderEcaComparison(match, originFac, destZip, destCity, destState, miles){
@@ -2095,7 +2095,7 @@ MSF.ecaKind = isRail ? (RAIL_GROUP_MSF[railEquipGroup(match.equip)] || "cb") : "
 vsGp.dataset.total = gpTotal > 0 ? String(gpTotal) : ""; vsGp.dataset.cur = cur;
 vsGp.textContent = gpTotal > 0 ? ("vs GP " + fmt(gpTotal, cur)) : "";
 const nActual = Object.keys(actualByName).length;
-content.innerHTML = '<div class="eca-loading">'+(hasActual ? "Loading" : "Estimating")+" "+comps.length+" competitor"+(comps.length>1?"s":"")+(nActual ? " ("+nActual+" quoted)" : "")+"â€¦</div>";
+content.innerHTML = '<div class="eca-loading">'+(hasActual ? "Loading" : "Estimating")+" "+comps.length+" competitor"+(comps.length>1?"s":"")+(nActual ? " ("+nActual+" quoted)" : "")+"…</div>";
 card.style.display = "block";
 
 const destStr = buildDestString(destZip, destCity, destState);
@@ -2136,16 +2136,16 @@ if(!rows.length){
 rows.sort((a,b)=> a.est - b.est);
 const renderRow = (r)=>{
   const cls = r.delta < -0.5 ? "eca-neg" : (r.delta > 0.5 ? "eca-pos" : "");
-  const dot = r.delta < -0.5 ? "ðŸ”´ " : (r.delta > 0.5 ? "ðŸŸ¢ " : "");
-  const sign = r.delta < 0 ? "âˆ’" : "+";
-  const milesCell = r.miles != null ? r.miles : "â€”";
+  const dot = r.delta < -0.5 ? "🔴 " : (r.delta > 0.5 ? "🟢 " : "");
+  const sign = r.delta < 0 ? "−" : "+";
+  const milesCell = r.miles != null ? r.miles : "—";
   const badge = r.quoted ? ' <span style="font-size:10px;color:var(--text-muted);font-weight:600;">(quoted)</span>' : "";
   const deltaCell = gpTotal > 0
     ? (dot+sign+fmt(Math.abs(r.delta), cur))
-    : "â€”";
-  return "<tr><td>"+r.name+badge+'</td><td class="eca-loc">'+r.loc+'</td><td class="mono" style="text-align:right;">'+milesCell+'</td><td class="mono" style="text-align:right;">'+fmt(r.est, cur)+'</td><td class="mono eca-msf" style="text-align:right;" data-est="'+r.est+'" data-cur="'+cur+'">â€”</td><td class="mono '+cls+'" style="text-align:right;">'+deltaCell+"</td></tr>";
+    : "—";
+  return "<tr><td>"+r.name+badge+'</td><td class="eca-loc">'+r.loc+'</td><td class="mono" style="text-align:right;">'+milesCell+'</td><td class="mono" style="text-align:right;">'+fmt(r.est, cur)+'</td><td class="mono eca-msf" style="text-align:right;" data-est="'+r.est+'" data-cur="'+cur+'">—</td><td class="mono '+cls+'" style="text-align:right;">'+deltaCell+"</td></tr>";
 };
-const head = '<tr><th>Competitor</th><th>Location</th><th style="text-align:right;">Miles</th><th style="text-align:right;">Total</th><th style="text-align:right;" title="Competitor total Ã· the same sqft per load as the GP quote">$/MSF</th><th style="text-align:right;">&Delta; vs GP</th></tr>';
+const head = '<tr><th>Competitor</th><th>Location</th><th style="text-align:right;">Miles</th><th style="text-align:right;">Total</th><th style="text-align:right;" title="Competitor total ÷ the same sqft per load as the GP quote">$/MSF</th><th style="text-align:right;">&Delta; vs GP</th></tr>';
 const TOPN = 5;
 const top = rows.slice(0, TOPN).map(renderRow).join("");
 const rest = rows.slice(TOPN).map(renderRow).join("");
@@ -2154,13 +2154,13 @@ const nEst = rows.length - nQuoted;
 const noteRoute = noRoute ? '<div class="eca-note">'+noRoute+" competitor"+(noRoute>1?"s":"")+" had no drivable route and were skipped.</div>" : "";
 let noteMethod = "";
 if(nQuoted){
-  noteMethod = '<div class="eca-note">'+nQuoted+" competitor lane"+(nQuoted>1?"s":"")+" from Rate Update Work (ECA Rail Rates)."+(nEst ? " "+nEst+" other"+(nEst>1?"s":"")+" estimated from GP $/mi Ã— competitor miles." : "")+"</div>";
+  noteMethod = '<div class="eca-note">'+nQuoted+" competitor lane"+(nQuoted>1?"s":"")+" from Rate Update Work (ECA Rail Rates)."+(nEst ? " "+nEst+" other"+(nEst>1?"s":"")+" estimated from GP $/mi × competitor miles." : "")+"</div>";
 }else if(isRail){
-  noteMethod = '<div class="eca-note">Rail estimate uses GP\'s implied '+fmt(railRPM, cur)+"/mi (lane total Ã· "+miles+" mi) applied to each competitor's distance â€” fuel included.</div>";
+  noteMethod = '<div class="eca-note">Rail estimate uses GP\'s implied '+fmt(railRPM, cur)+"/mi (lane total ÷ "+miles+" mi) applied to each competitor's distance — fuel included.</div>";
 }else{
   const fpm = fscPerMile(cur);
-  noteMethod = '<div class="eca-note">Truck estimate uses GP\'s '+fmt(rate, cur)+"/mi (min "+fmt(minCharge, cur)+") Ã— each competitor's miles"
-    + (fpm != null ? " + DOE fuel "+fmt(fpm, cur)+"/mi ("+fscSourceLabel(cur)+")." : " â€” fuel excluded (" + (fscMissingNote(cur) ? fscMissingNote(cur).split(" â€” ")[0] : "DOE price not loaded") + ").") + "</div>";
+  noteMethod = '<div class="eca-note">Truck estimate uses GP\'s '+fmt(rate, cur)+"/mi (min "+fmt(minCharge, cur)+") × each competitor's miles"
+    + (fpm != null ? " + DOE fuel "+fmt(fpm, cur)+"/mi ("+fscSourceLabel(cur)+")." : " — fuel excluded (" + (fscMissingNote(cur) ? fscMissingNote(cur).split(" — ")[0] : "DOE price not loaded") + ").") + "</div>";
 }
 content.innerHTML = '<table class="eca-table"><thead>'+head+"</thead><tbody>"+top+"</tbody>"+(rest ? '<tbody id="ecaRest" style="display:none;">'+rest+"</tbody>" : "")+"</table>"+(rest ? '<button class="eca-toggle" onclick="toggleEcaShowAll(this)">Show all '+rows.length+"</button>" : "")+noteMethod+noteRoute;
 updateEcaMsf();
@@ -2179,9 +2179,9 @@ function nc(str){ return str ? str.split(",")[0].trim().toUpperCase() : ""; }
 // Equipment grouping handles both long-form codes (60BX000HV, 73RF000) and
 // short-form codes (B60, B63, H63, C73, H73, F60, etc.) from KBX rail data.
 // Classification is based on actual EqpDesc descriptions in GP_Rail_Freight.xlsx:
-//   B-prefix (B50/B52/B60/B63), H63, HF52 â†’ BOXCAR (all describe boxcars)
-//   C73/C74/H73/H74 â†’ CENTERBEAM (not-bulkhead flat cars)
-//   F60/F62 â†’ CENTERBEAM (bulkhead flatcars)
+//   B-prefix (B50/B52/B60/B63), H63, HF52 → BOXCAR (all describe boxcars)
+//   C73/C74/H73/H74 → CENTERBEAM (not-bulkhead flat cars)
+//   F60/F62 → CENTERBEAM (bulkhead flatcars)
 // B-Train truck rates use equipment codes ending in "BT" (e.g. 58FT000BT).
 function isBTrainEquip(code){
 return /BT$/.test((code || "").toString().trim().toUpperCase());
@@ -2516,23 +2516,23 @@ return;
 }
 const quality = (match.via && match.via.kind !== "alias") ? "partial" : match.score>=30 ? "exact" : match.score>=20 ? "partial" : "estimated";
 badge.innerHTML = quality==="exact"
-? '<span class="match-badge match-exact">âœ“ Exact Match</span>'
+? '<span class="match-badge match-exact">✓ Exact Match</span>'
 : quality==="partial"
-? '<span class="match-badge match-partial">â‰ˆ Partial Match</span>'
+? '<span class="match-badge match-partial">≈ Partial Match</span>'
 : '<span class="match-badge match-none">~ Estimated</span>';
 const isMI = (match.uom||"").toString().toUpperCase() === "MI";
 const isRail = match.mode === "RAIL";
 const isBTrain = match.mode === "TRUCK" && isBTrainEquip(match.equip);
 // B-Train is a flat, all-in lane rate just like rail (no separate fuel line).
 const isAllIn = isRail || isBTrain || Boolean(match.customer);
-const equipLabel = match.equip ? ` &nbsp;Â·&nbsp; <span style="font-size:11px;color:#475569;font-weight:600;">${match.equip}</span>` : "";
-rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}${match.customer ? " Â· " + match.customer : ""}${match.via ? " Â· " + _escHtml(railViaShort(match.via)) : ""}</span>`;
+const equipLabel = match.equip ? ` &nbsp;·&nbsp; <span style="font-size:11px;color:#475569;font-weight:600;">${match.equip}</span>` : "";
+rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}${match.customer ? " · " + match.customer : ""}${match.via ? " · " + _escHtml(railViaShort(match.via)) : ""}</span>`;
 const currency = match.currency || "USD";
 const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
 const minCharge = Number(match.minCharge)||0;
 const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
 const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : null;
-const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "â€”");
+const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
 const milesFailed = isMI && miles==null;
 const gpAvg = isMI ? gpRate*milesActual : gpRate;
 // Rail, B-Train and customer rates already include fuel - don't add it again.
@@ -2543,14 +2543,14 @@ const fuelMiles = (miles != null && miles > 0) ? miles : null;
 const gpFuel = isAllIn ? 0 : ((fuelPerMile != null && fuelMiles != null) ? fuelPerMile * fuelMiles : null);
 const fuelMissing = !isAllIn && gpFuel == null;
 const fuelNote = isAllIn ? "" : (!fuelMissing
-  ? `Fuel: ${fmt(fuelPerMile,currency)}/mi Ã— ${fuelMiles} mi (${fscSourceLabel(currency)})`
-  : (fuelPerMile == null ? fscMissingNote(currency) : "Google miles unavailable â€” can't price fuel; total excludes fuel"));
+  ? `Fuel: ${fmt(fuelPerMile,currency)}/mi × ${fuelMiles} mi (${fscSourceLabel(currency)})`
+  : (fuelPerMile == null ? fscMissingNote(currency) : "Google miles unavailable — can't price fuel; total excludes fuel"));
 // Rate Per Mile is shown ALL-IN, per user: Total Freight (avg + fuel) / miles.
 const rpmMiles = isMI ? milesActual : miles;
 const gpAllInRPM = (rpmMiles && rpmMiles > 0) ? (gpAvg + (gpFuel || 0)) / rpmMiles : null;
 window._matchData = { type:"single", isMI, isRail: isAllIn, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM, rpmMiles, fuelMissing };
 const milesNote = milesFailed
-? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable â€” using estimate)</span>'
+? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
 : (isMI && miles!=null)
 ? ' <span style="font-size:11px;color:#16a34a;font-style:italic;">via Google Maps</span>'
 : '';
@@ -2564,34 +2564,34 @@ content.innerHTML = `${railViaNoteHTML(match.via)}
 <td>Miles${milesNote}</td>
 <td class="mono">${milesLabel}</td>
 <td class="mono">${milesLabel}</td>
-<td class="mono diff-zero">â€”</td>
+<td class="mono diff-zero">—</td>
 </tr>
 <tr>
 <td>Rate Per Mile <span style="font-size:11px;color:var(--text-muted);font-style:italic;">${fuelMissing ? "(excl. fuel)" : "(incl. fuel)"}</span></td>
-<td class="mono" id="gpRPM">${gpAllInRPM != null ? fmt(gpAllInRPM,currency) : "â€”"}<span class="currency-badge">${currency}</span></td>
-<td class="mono" id="adjRPM">${gpAllInRPM != null ? fmt(gpAllInRPM,currency) : "â€”"}</td>
-<td class="mono diff-zero" id="diffRPM">â€”</td>
+<td class="mono" id="gpRPM">${gpAllInRPM != null ? fmt(gpAllInRPM,currency) : "—"}<span class="currency-badge">${currency}</span></td>
+<td class="mono" id="adjRPM">${gpAllInRPM != null ? fmt(gpAllInRPM,currency) : "—"}</td>
+<td class="mono diff-zero" id="diffRPM">—</td>
 </tr>
 ${isAllIn ?`
 <tr>
 <td>Fuel Per Load <span style="font-size:11px;color:var(--text-muted);font-style:italic;">(included in rate)</span></td>
 <td class="mono" style="color:var(--text-muted);">included</td>
 <td class="mono" style="color:var(--text-muted);">included</td>
-<td class="mono diff-zero">â€”</td>
+<td class="mono diff-zero">—</td>
 </tr>
 ` : `
 <tr>
 <td>Fuel Per Load <span class="fuel-note${fuelMissing ? " fuel-na" : ""}" id="fuelNote">${fuelNote}</span></td>
 <td class="mono" id="gpFuelCell">${fuelMissing ? '<span class="fuel-na">unavailable</span>' : fmt(gpFuel,currency) + '<span class="currency-badge">' + currency + '</span>'}</td>
 <td class="mono" id="adjFuelCell">${fuelMissing ? '<span class="fuel-na">unavailable</span>' : fmt(gpFuel,currency)}</td>
-<td class="mono diff-zero" id="diffFuel">â€”</td>
+<td class="mono diff-zero" id="diffFuel">—</td>
 </tr>
 `}
 <tr>
 <td>${isAllIn ?"Total Rate Per Load" : "Avg Rate Per Load"}</td>
 <td class="mono" id="gpAvgCell">${fmt(gpAvg,currency)}<span class="currency-badge">${currency}</span></td>
 <td class="mono" id="adjAvgCell">${fmt(0,currency)}</td>
-<td class="mono diff-zero" id="diffAvg">â€”</td>
+<td class="mono diff-zero" id="diffAvg">—</td>
 </tr>
 </tbody>
 <tfoot>
@@ -2599,7 +2599,7 @@ ${isAllIn ?`
 <td>Total Freight Per Load${fuelMissing ? ' <span class="fuel-note fuel-na" style="display:inline;">(excl. fuel)</span>' : ""}</td>
 <td class="mono" id="totalGP">${fmt(0,currency)}</td>
 <td class="mono" id="totalAdj">${fmt(0,currency)}</td>
-<td class="mono diff-zero" id="totalDiff">â€”</td>
+<td class="mono diff-zero" id="totalDiff">—</td>
 </tr>
 </tfoot>
 </table>`;
@@ -2615,7 +2615,7 @@ return nums.length ? nums.reduce((a,b)=>a+b,0) : null;
 }
 
 function _routeArrows(route){
-return route ? String(route).split("-").join(" â†’ ") : "";
+return route ? String(route).split("-").join(" → ") : "";
 }
 
 function displayCompareResults(found, miles, originFac, lane){
@@ -2655,9 +2655,9 @@ if(priced.length >= 2){
 const sorted = priced.slice().sort((a, b) => a.total - b.total);
 const w = sorted[0], rest = sorted.slice(1);
 if(rest.every(x => Math.abs(x.total - w.total) < 0.01)){
-winnerNote = `<div class="compare-winner">ðŸ“Š ${priced.map(x => RAIL_GROUP_LABEL[x.g]).join(" and ")} are priced equally at ${fmt(w.total, w.cur)}.</div>`;
+winnerNote = `<div class="compare-winner">📊 ${priced.map(x => RAIL_GROUP_LABEL[x.g]).join(" and ")} are priced equally at ${fmt(w.total, w.cur)}.</div>`;
 }else{
-winnerNote = `<div class="compare-winner">ðŸ’° ${RAIL_GROUP_LABEL[w.g]} saves ` + rest.map(x => `${fmt(x.total - w.total, w.cur)} (${(((x.total - w.total) / x.total) * 100).toFixed(1)}%) vs ${RAIL_GROUP_LABEL[x.g]}`).join(", ") + `.</div>`;
+winnerNote = `<div class="compare-winner">💰 ${RAIL_GROUP_LABEL[w.g]} saves ` + rest.map(x => `${fmt(x.total - w.total, w.cur)} (${(((x.total - w.total) / x.total) * 100).toFixed(1)}%) vs ${RAIL_GROUP_LABEL[x.g]}`).join(", ") + `.</div>`;
 }
 }
 const MSF_CELL_ID = { BOXCAR:"msfBox", CENTERBEAM:"msfCb", FLATCAR:"msfFlat" };
@@ -2673,18 +2673,18 @@ const ssum = _splitSum(split);
 const gap = (ssum != null) ? (total - ssum) : 0;
 let feesRow = "";
 if(gap >= 0.02) feesRow = `<div class="truck-rail-row"><span class="truck-rail-label">+ Other fees</span><span class="truck-rail-value">${fmt(gap,cur)}</span></div>`;
-else if(gap <= -0.02) feesRow = `<div class="truck-rail-row"><span class="truck-rail-label">Adjustment</span><span class="truck-rail-value">âˆ’${fmt(Math.abs(gap),cur)}</span></div>`;
+else if(gap <= -0.02) feesRow = `<div class="truck-rail-row"><span class="truck-rail-label">Adjustment</span><span class="truck-rail-value">−${fmt(Math.abs(gap),cur)}</span></div>`;
 return `<div class="compare-card">
-<div class="compare-title">${label} &nbsp;Â·&nbsp; <span style="font-weight:500;color:var(--text-muted);">${m.equip||""}</span></div>
+<div class="compare-title">${label} &nbsp;·&nbsp; <span style="font-weight:500;color:var(--text-muted);">${m.equip||""}</span></div>
 <div style="padding:14px 16px;">
-<div class="truck-rail-row"><span class="truck-rail-label">Equipment</span><span class="truck-rail-value">${m.equip||"â€”"}</span></div>
+<div class="truck-rail-row"><span class="truck-rail-label">Equipment</span><span class="truck-rail-value">${m.equip||"—"}</span></div>
 <div class="truck-rail-row"><span class="truck-rail-label">Currency</span><span class="truck-rail-value">${cur}</span></div>
 ${routeArrows ? `<div class="rail-route-block"><span class="truck-rail-label">Route</span><div class="rail-route-val">${routeArrows}</div></div>` : ""}
 ${m.destRR ? `<div class="truck-rail-row"><span class="truck-rail-label">Dest. railroad</span><span class="truck-rail-value">${_escHtml(m.destRR)}</span></div>` : ""}
 ${split ? `<div class="rail-route-block"><span class="truck-rail-label">Carrier split</span><div class="rail-route-val">${split}</div></div>` : ""}
 ${feesRow}
 <div class="truck-rail-row"><span class="truck-rail-label">Total Rate</span><span class="truck-rail-value">${fmt(total,cur)}</span></div>
-<div class="truck-rail-row"><span class="truck-rail-label">$/MSF</span><span class="truck-rail-value" id="${MSF_CELL_ID[grp]}">â€”</span></div>
+<div class="truck-rail-row"><span class="truck-rail-label">$/MSF</span><span class="truck-rail-value" id="${MSF_CELL_ID[grp]}">—</span></div>
 </div>
 </div>`;
 };
@@ -2703,13 +2703,13 @@ msfRefresh();
 }
 
 function fmt(n, currency){
-if(n == null || isNaN(n)) return "â€”";
+if(n == null || isNaN(n)) return "—";
 const sign = currency === "CAD" ? "C$" : "$";
 return sign + Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
 function fmtPct(n){
-if(n == null || isNaN(n) || !isFinite(n)) return "â€”";
+if(n == null || isNaN(n) || !isFinite(n)) return "—";
 const s = n >= 0 ? "+" : "";
 return s + Number(n).toFixed(1) + "%";
 }
@@ -2755,10 +2755,10 @@ setCell("diffRPM", fmtPct(rpmPct), pctClass(rpmPct));
 }
 
 // Fuel cells only exist for non-rail (rail shows "included" placeholder).
-// Fuel is not adjusted, so its % difference is always "â€”".
+// Fuel is not adjusted, so its % difference is always "—".
 if(!isRail && !fuelMissing){
 setCell("adjFuelCell", `${fmt(adjFuel,currency)}<span class="currency-badge">${currency}</span>`);
-setCell("diffFuel", "â€”", "diff-zero");
+setCell("diffFuel", "—", "diff-zero");
 }
 
 setCell("adjAvgCell", `${fmt(adjAvg,currency)}<span class="currency-badge">${currency}</span>`);
@@ -2768,7 +2768,7 @@ setCell("diffAvg", fmtPct(avgPct), pctClass(avgPct));
 // $/MSF = total / sqft per load x 1000 (right side of the total cell).
 setCell("totalGP", `<div class="tot-flex"><span>${fmt(gpTotal,currency)}<span class="currency-badge">${currency}</span></span>${msfValHTML(gpTotal, "truck", currency, true)}</div>`);
 const _adjMsf = msfValue(adjTotal, "truck");
-setCell("totalAdj", `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span><span class="msf-mini">${_adjMsf != null ? fmt(_adjMsf,currency) : "â€”"} /MSF</span>`);
+setCell("totalAdj", `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span><span class="msf-mini">${_adjMsf != null ? fmt(_adjMsf,currency) : "—"} /MSF</span>`);
 setCell("totalDiff", fmtPct(totalPct), pctClass(totalPct));
 window._lastRailTotal = adjTotal;
 }
@@ -2800,5 +2800,4 @@ refreshRailRouteOptions();
 loadRates();
 </script>
 </body>
-<!-- Ship-To 0250013489 published 2026-10-05 -->
 </html>
