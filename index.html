@@ -1836,6 +1836,8 @@ function _msfOriginKey(originFac){ return (originFac||"").split(",").slice(0,2).
 function _msfDefaultThick(tkey){
 const t = MSF_TABLES[tkey]; if(!t) return "";
 const names = t.sizes.map(z=>z[0]);
+// Plywood defaults to 3/8" (Matt 10/7); other mills unchanged.
+if(tkey === "PLYWOOD" && names.includes("3/8")) return "3/8";
 return names.includes("7/16") ? "7/16" : (names.includes("15/32") ? "15/32" : (names[0]||""));
 }
 function _msfSize(){
