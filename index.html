@@ -291,6 +291,8 @@ table.rail-routes-table tbody tr.rr-sel td:first-child{box-shadow:inset 3px 0 0 
 .rail-equip-note{margin:0 24px 12px;font-size:12px;color:#334155;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;}
 .rail-equip-note.fallback{color:#92400e;background:#fffbeb;border-color:#fde68a;font-weight:600;}
 .compare-grid.single{grid-template-columns:minmax(0,1fr);max-width:560px;}
+.rail-raven-warn{margin:0 24px 12px;font-size:13px;font-weight:700;color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-left:4px solid #d97706;border-radius:8px;padding:9px 12px;line-height:1.45;}
+.rail-raven-warn .why{display:block;font-weight:500;font-size:12px;margin-top:2px;}
 .rail-via-note.nearest{color:#92400e;background:#fffbeb;border-color:#fde68a;}
 .rail-via-alts{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .rail-via-alt{font:inherit;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#1e293b;cursor:pointer;}
@@ -299,6 +301,7 @@ table.rail-routes-table tbody tr.rr-sel td:first-child{box-shadow:inset 3px 0 0 
 .rail-routes{margin:0 12px 16px;}
 .rail-route-note{margin:0 12px 12px;}
 .rail-via-note{margin:0 12px 12px;}
+.rail-raven-warn{margin:0 12px 12px;}
 table.rail-routes-table thead th,table.rail-routes-table tbody td{padding:6px 8px;}
 }
 /* DOE truck fuel line */
@@ -462,6 +465,7 @@ route: r[16] || "",
 carrierSplit: r[17] || "",
 customer: r[18] || "",
 destRR: r[19] || "",   // rail: destination serving railroad (KBX DRR)
+src: r[20] || "",      // rail: "supp" = GP Rail Freight Supplement row (KBX search, not a published Raven lane)
 };
 }
 return {
@@ -1518,6 +1522,35 @@ res.via.alts = alts.slice(0, 40);
 _RAIL_DEST_CACHE.set(ck, res);
 return res;
 }
+// ---- "Not published in Raven" warning ----
+// A rail quote is only bookable when Raven has the exact lane (actual origin ->
+// actual destination). Flag every fallback: nearby/KBX/picked station ("via"),
+// a Ship-To rail ramp standing in for the DC, a Supplement-only row (src "supp"),
+// or the mill's equipment fallback (e.g. Diboll centerbeam).
+function railRavenReasons(via, lane, found, groups, rampFrom){
+const R = [];
+if(via) R.push("rate is for the " + via.city + ", " + via.state + " station" + (via.mi != null ? " (" + Math.round(via.mi) + " mi away)" : "") + ", not " + via.fromCity + ", " + via.fromState);
+if(rampFrom) R.push("rate is to the rail ramp, not the Ship-To address " + rampFrom);
+const supp = (groups || []).filter(g => found && found[g] && found[g].src === "supp");
+if(supp.length) R.push(supp.map(g => RAIL_GROUP_LABEL[g]).join(" / ") + " rate is a KBX Supplement search, not a published Raven rate");
+if(lane && lane.fallback) R.push("equipment fallback (" + lane.groups.map(g => RAIL_GROUP_LABEL[g].toLowerCase()).join("/") + " quoted because the mill's normal equipment has no rate)");
+return R;
+}
+function _railRampFrom(){
+const a = SHIP_TO_APPLIED, q = window._lastQuery;
+if(!a || !a.entry || !a.entry.rail || !q) return "";
+const e = a.entry;
+if(q.destCity !== a.city || q.destState !== a.state) return "";
+if(e.city === a.city && e.state === a.state) return "";
+return e.city + ", " + e.state;
+}
+function railRavenWarnHTML(via, lane, found, groups, rampFrom){
+if(!groups || !groups.some(g => found && found[g])) return "";
+const R = railRavenReasons(via, lane, found, groups, rampFrom);
+if(!R.length) return "";
+const st = via ? " Station used: " + via.city + ", " + via.state + "." : "";
+return `<div class="rail-raven-warn" id="railRavenWarn">\u26a0 Lane not published in Raven \u2014 Reach out to Business Logistics to Publish Rate.${_escHtml(st)}<span class="why">${_escHtml(R.join("; "))}.</span></div>`;
+}
 // "boxcar" / "boxcar or centerbeam" for the mill on screen ("rail" when it has no equipment rule).
 function _railRatePhrase(){
 const o = (window._lastQuery && window._lastQuery.originFac) || "";
@@ -2556,7 +2589,7 @@ const milesNote = milesFailed
 : (isMI && miles!=null)
 ? ' <span style="font-size:11px;color:#16a34a;font-style:italic;">via Google Maps</span>'
 : '';
-content.innerHTML = `${railViaNoteHTML(match.via)}
+content.innerHTML = `${match.mode === "RAIL" ? railRavenWarnHTML(match.via, null, { [railEquipGroup(match.equip)]:match }, [railEquipGroup(match.equip)], _railRampFrom()) : ""}${railViaNoteHTML(match.via)}
 <table id="rateTable" class="no-adjust">
 <thead>
 <tr><th>Item</th><th>GP Rate</th><th>Adjust Rate</th><th>% Difference</th></tr>
@@ -2692,6 +2725,7 @@ ${feesRow}
 };
 
 content.innerHTML = `
+${railRavenWarnHTML(RAIL_VIA, lane, found, groups, _railRampFrom())}
 ${railViaNoteHTML(RAIL_VIA)}
 ${railRuleNoteHTML(originFac, lane)}
 ${routeNote}
