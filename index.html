@@ -870,12 +870,55 @@ _setShipToMsg("", ""); SHIP_TO_APPLIED = null;
 });
 }
 
+// Same mill, different origin name per mode (truck origin vs rail station).
+// Each group lists every name the mill goes by; on a mode switch the first
+// name in the group that exists in the new mode's list is picked.
+const ORIGIN_MILL_ALIASES = [
+["ALCOLU,SC,US"],                                   // Clarendon SC (truck + rail both file as Alcolu)
+["GLADYS,VA,US", "NARUNA,VA,US"],                   // Brookneal VA: truck Gladys, rail Naruna
+["MADISON,GA,US", "MADISON (CPR),GA,US"],           // Madison GA (rail also files as Madison (CPR))
+["MOUNT JEWETT,PA,US", "MT JEWETT,PA,US"],
+["ANTIOCH,CA,US", "EAST ANTIOCH,CA,US"],
+["WARRENTON,GA,US", "EAST WARRENTON,GA,US"],
+["BLUE RAPIDS,KS,US", "BESTWALL,KS,US"],
+["ROME,GA,US", "KRANNERT,GA,US"],
+["LOVELL,WY,US", "HIMES,WY,US"]
+];
+// "CITY,ST,CC" -> normalized "CITY|ST" for the same-city/state fallback.
+function _originCityKey(loc){
+const p = String(loc||"").toUpperCase().split(",");
+let city = (p[0]||"").replace(/\(.*?\)/g, "").replace(/^EAST\s+|^WEST\s+/, "").replace(/^MOUNT\s+/, "MT ").replace(/\s+/g, " ").trim();
+return city + "|" + (p[1]||"").trim();
+}
+// Pick the origin in `available` that is the same mill as `prev`: exact name,
+// then alias map, then same city/state. "" when the mill has no equivalent.
+function findEquivalentOrigin(prev, available){
+if(!prev) return "";
+const avail = Array.from(available || []);
+if(avail.includes(prev)) return prev;
+for(const g of ORIGIN_MILL_ALIASES){
+if(!g.includes(prev)) continue;
+const hit = g.find(o => avail.includes(o));
+if(hit) return hit;
+}
+const k = _originCityKey(prev);
+return avail.find(o => _originCityKey(o) === k) || "";
+}
+
 function setMode(mode){
+const originSel = document.getElementById("originFacility");
+const prevOrigin = originSel?.value || "";
 SELECTED_MODE = mode;
 if(mode !== "TRUCK") SELECTED_TRUCK_EQ = "STANDARD";
 document.getElementById("modeTruck")?.classList.toggle("active", mode==="TRUCK");
 document.getElementById("modeRail")?.classList.toggle("active", mode==="RAIL");
 refreshOriginOptions();
+// Keep the same origin mill across the switch when the new mode has it.
+if(originSel && prevOrigin){
+const opts = Array.from(originSel.options).map(o => o.value).filter(Boolean);
+const keep = findEquivalentOrigin(prevOrigin, opts);
+if(keep){ originSel.value = keep; onOriginChange(); }
+}
 rebuildTruckEquipOptions();   // shows B-Train only for B-Train origins, in Truck mode
 clearResultsOnly();
 reapplyShipToForMode();
