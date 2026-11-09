@@ -120,6 +120,12 @@ tfoot .total-row td{background:var(--total-bg)!important;border-top:2px solid va
 .match-partial{background:#fef3c7;color:#92400e;}
 .match-none{background:#fee2e2;color:#991b1b;}
 .currency-badge{font-size:10px;font-weight:700;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle;}
+.quote-cur-panel{padding:10px 24px;border-bottom:1.5px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.quote-cur-panel label{font-size:13px;font-weight:600;color:var(--label);white-space:nowrap;}
+.cur-tog{font-size:12px;font-weight:700;padding:4px 12px;border-radius:16px;border:1.5px solid var(--border);background:#fff;color:var(--text-muted);cursor:pointer;}
+.cur-tog:hover{border-color:#93c5fd;color:#0369a1;}
+.cur-tog.active{background:#e0f2fe;border-color:#0284c7;color:#0369a1;}
+.quote-cur-note{font-size:12px;color:var(--text-muted);font-style:italic;}
 .data-status{font-size:11px;color:var(--text-muted);margin-left:auto;font-style:italic;}
 .zip-picker{
 position:fixed;background:#fff;border:1.5px solid var(--border);border-radius:12px;
@@ -381,6 +387,9 @@ const RAIL_ORIGIN_LABELS = {
 
 const zipSuggestCache = new Map();
 const ZIP_LS_KEY = "fet_zip_suggest_cache_v1";
+const QUOTE_CUR_LS_KEY = "fet_quote_currency_v1";
+let QUOTE_PREF = "CAD";  // display preference when the matched lane is CAD
+try{ const _qp = localStorage.getItem(QUOTE_CUR_LS_KEY); if(_qp === "USD" || _qp === "CAD") QUOTE_PREF = _qp; }catch(e){}
 let LAST_DEST_CITY = "";
 let LAST_DEST_STATE = "";
 let LAST_DEST_ZIPS = [];
@@ -666,6 +675,12 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <span>%</span>
 </div>
 <span class="adj-hint">Positive = markup &nbsp;|&nbsp; Negative = discount &nbsp;|&nbsp; linehaul only (fuel unchanged)</span>
+</div>
+<div class="quote-cur-panel" id="quoteCurPanel" hidden>
+<label>Quote currency:</label>
+<button type="button" class="cur-tog" data-cur="CAD" onclick="setQuoteCurrency('CAD')">CAD</button>
+<button type="button" class="cur-tog" data-cur="USD" onclick="setQuoteCurrency('USD')">USD</button>
+<span class="quote-cur-note" id="quoteCurNote"></span>
 </div>
 <div class="msf-panel" id="msfPanel" hidden>
 <label for="msfTable" title="$ per thousand square feet: total freight ÷ sqft per load × 1000 (actual sqft, not 3/8 basis)">$/MSF</label>
@@ -961,6 +976,7 @@ if(existing) existing.remove();
 const ecaC = document.getElementById("ecaCard");
 if(ecaC) ecaC.style.display = "none";
 const msfP = document.getElementById("msfPanel"); if(msfP) msfP.hidden = true;
+const qcp = document.getElementById("quoteCurPanel"); if(qcp) qcp.hidden = true;
 }
 
 // ---- Business unit (Gypsum / Wood Products / Other) helpers ----
@@ -1622,9 +1638,11 @@ const SHOW = 8;
 const items = alts.map((a, i) => {
 const f = {}, vals = {};
 for(const g of RAIL_GROUPS_ALL){ f[g] = findRateByGroup(lq.originFac, a.city, a.state, "", g); vals[g] = f[g] ? Number(f[g].flat) : null; }
-const cur = (f.BOXCAR || f.CENTERBEAM || f.FLATCAR)?.currency || "USD";
+const nativeCur = (f.BOXCAR || f.CENTERBEAM || f.FLATCAR)?.currency || "USD";
+const cur = quoteDispCur(nativeCur);
+const valsDisp = {}; for(const g of RAIL_GROUPS_ALL) valsDisp[g] = vals[g] == null ? null : quoteDispAmt(vals[g], nativeCur);
 const on = a.city === v.city && a.state === v.state;
-const txt = _escHtml(a.city + ", " + a.state) + (a.mi != null ? " " + Math.round(a.mi) + " mi" : "") + " \u00b7 " + railValsLabel(vals, railCardGroups(lq.originFac, f, railLaneGroups(lq.originFac, a.city, a.state, "")), cur);
+const txt = _escHtml(a.city + ", " + a.state) + (a.mi != null ? " " + Math.round(a.mi) + " mi" : "") + " \u00b7 " + railValsLabel(valsDisp, railCardGroups(lq.originFac, f, railLaneGroups(lq.originFac, a.city, a.state, "")), cur);
 const hide = (i >= SHOW && !on) ? ' data-more="1" style="display:none;"' : "";
 return on ? `<span class="rail-via-alt on">${txt}</span>` : `<button type="button" class="rail-via-alt"${hide} onclick="pickRailVia(${i})" title="Price via this station">${txt}</button>`;
 });
@@ -1738,11 +1756,14 @@ frag.appendChild(opt("", "No rail routes on file"));
 }else{
 const f = {}, vals = {};
 for(const g of RAIL_GROUPS_ALL){ f[g] = findRateByGroup(q.originFac, rq.city, rq.state, q.destZip, g); vals[g] = f[g] ? Number(f[g].flat) : null; }
-const cur = (f.BOXCAR || f.CENTERBEAM || f.FLATCAR)?.currency || "USD";
+const nativeCur = (f.BOXCAR || f.CENTERBEAM || f.FLATCAR)?.currency || "USD";
+const cur = quoteDispCur(nativeCur);
+const valsDisp = {}; for(const g of RAIL_GROUPS_ALL) valsDisp[g] = vals[g] == null ? null : quoteDispAmt(vals[g], nativeCur);
 const og = railOptionGroups(q.originFac, RAIL_ROUTE.options, RAIL_ROUTE.laneGroups);
-frag.appendChild(opt("", "Cheapest (default) \u2014 " + railValsLabel(vals, og, cur)));
+frag.appendChild(opt("", "Cheapest (default) \u2014 " + railValsLabel(valsDisp, og, cur)));
 RAIL_ROUTE.options.forEach((o, i) => {
-frag.appendChild(opt(o.key, (i + 1) + ". " + railRouteLabel(o) + " \u2014 " + railValsLabel(o.vals, og, o.currency)));
+const ov = {}; for(const g of RAIL_GROUPS_ALL) ov[g] = o.vals[g] == null ? null : quoteDispAmt(o.vals[g], o.currency);
+frag.appendChild(opt(o.key, (i + 1) + ". " + railRouteLabel(o) + " \u2014 " + railValsLabel(ov, og, quoteDispCur(o.currency))));
 });
 }
 sel.replaceChildren(frag);
@@ -1783,7 +1804,7 @@ const SHOW = 5;
 const og = railOptionGroups(lq.originFac, opts, RAIL_ROUTE.laneGroups);
 const row = (o, i) => `<tr class="${o.key === RAIL_ROUTE.selected ? "rr-sel" : ""}${i >= SHOW ? " rr-more" : ""}" ${i >= SHOW ? 'style="display:none;"' : ""} onclick="pickRailRoute(${i})" title="Quote this route">
 <td>${i + 1}</td><td class="rr-route">${_escHtml(o.route ? _routeArrows(o.route) : "(route not listed)")}</td><td>${_escHtml(o.destRR || "\u2014")}</td>
-${og.map(g => `<td class="mono">${_fmtShort(o.vals[g], o.currency)}</td>`).join("")}</tr>`;
+${og.map(g => `<td class="mono">${_fmtShort(o.vals[g] == null ? null : quoteDispAmt(o.vals[g], o.currency), quoteDispCur(o.currency))}</td>`).join("")}</tr>`;
 const more = opts.length > SHOW ? `<button class="eca-toggle" onclick="this.previousElementSibling.querySelectorAll('.rr-more').forEach(r=>r.style.display=r.style.display==='none'?'':'none');this.textContent=this.textContent.startsWith('Show all')?'Show top ${SHOW}':'Show all ${opts.length}'">Show all ${opts.length}</button>` : "";
 return `<div class="rail-routes"><div class="rail-routes-title">Routes on file for this lane <span>\u2014 cheapest first \u00b7 click a row (or use the Route dropdown) to quote it</span></div>
 <table class="rail-routes-table"><thead><tr><th>#</th><th>Route</th><th>Dest. RR</th>${og.map(g => `<th>${RAIL_GROUP_LABEL[g]}</th>`).join("")}</tr></thead><tbody>${opts.map(row).join("")}</tbody></table>${more}</div>`;
@@ -2045,7 +2066,11 @@ const cc = currentCompareMatches;
 if(cc){
   for(const [kind, m, id] of [["box", cc.boxcar, "msfBox"], ["cb", cc.centerbeam, "msfCb"], ["flat", cc.flatcar, "msfFlat"]]){
     const el = document.getElementById(id);
-    if(el && m) el.innerHTML = msfValHTML(Number(m.flat)||0, kind, m.currency || "USD", true);
+    if(el && m){
+      const nativeCur = m.currency || "USD";
+      const cur = resolveQuoteCurrency(nativeCur);
+      el.innerHTML = msfValHTML(toQuoteAmount(Number(m.flat)||0, nativeCur, cur), kind, cur, true);
+    }
   }
 }
 updateEcaMsf();
@@ -2073,6 +2098,81 @@ function _isCAD(currency){ return String(currency||"").toUpperCase() === "CAD"; 
 function fscUsdCad(){
 const fx = FSC ? Number(FSC.usdcad) : NaN;
 return (fx > 0 && isFinite(fx)) ? fx : null;
+}
+// ---- Quote display currency (CAD lanes only) ----
+// Native rate currency stays CAD in rates.json. When the user picks USD, money
+// figures are converted with fsc.usdcad (CAD per 1 USD; USD = CAD / usdcad).
+// Preference remembered in localStorage; USD option hidden if usdcad missing.
+function resolveQuoteCurrency(nativeCur){
+const n = String(nativeCur || "USD").toUpperCase();
+if(n !== "CAD") return n;
+if(fscUsdCad() == null) return "CAD";
+return QUOTE_PREF === "USD" ? "USD" : "CAD";
+}
+function toQuoteAmount(n, nativeCur, displayCur){
+if(n == null || !isFinite(Number(n))) return n;
+const from = String(nativeCur || "USD").toUpperCase();
+const to = String(displayCur || from).toUpperCase();
+if(from === to) return Number(n);
+const fx = fscUsdCad();
+if(fx == null) return Number(n);
+if(from === "CAD" && to === "USD") return Number(n) / fx;
+if(from === "USD" && to === "CAD") return Number(n) * fx;
+return Number(n);
+}
+function quoteDispCur(nativeCur){ return resolveQuoteCurrency(nativeCur); }
+function quoteDispAmt(n, nativeCur){ return toQuoteAmount(n, nativeCur, resolveQuoteCurrency(nativeCur)); }
+function showQuoteCurPanel(nativeCur){
+const panel = document.getElementById("quoteCurPanel");
+if(!panel) return;
+const isCad = String(nativeCur || "").toUpperCase() === "CAD";
+const fx = fscUsdCad();
+if(!isCad || fx == null){ panel.hidden = true; return; }
+panel.hidden = false;
+const display = resolveQuoteCurrency("CAD");
+panel.querySelectorAll(".cur-tog").forEach(btn => {
+  btn.classList.toggle("active", btn.dataset.cur === display);
+});
+const note = document.getElementById("quoteCurNote");
+if(note){
+  if(display === "USD"){
+    const d = (FSC && FSC.fx_date) || "";
+    const src = (FSC && FSC.fx_source) ? "Bank of Canada" : "Bank of Canada";
+    note.textContent = "Converted at USD/CAD " + fx.toFixed(4) + " (" + src + (d ? ", " + d : "") + ")";
+  }else{
+    note.textContent = "";
+  }
+}
+}
+function setQuoteCurrency(cur){
+if(cur !== "USD" && cur !== "CAD") return;
+QUOTE_PREF = cur;
+try{ localStorage.setItem(QUOTE_CUR_LS_KEY, cur); }catch(e){}
+rerenderQuoteCurrency();
+}
+function rerenderQuoteCurrency(){
+const lq = window._lastQuery;
+if(SELECTED_MODE === "RAIL"){
+  // Rebuild Route dropdown labels in the chosen currency without clearing the pick.
+  const keepSel = RAIL_ROUTE.selected;
+  const keepLane = RAIL_ROUTE.lane;
+  RAIL_ROUTE.lane = "";
+  refreshRailRouteOptions();
+  if(keepLane && keepLane === RAIL_ROUTE.lane){
+    const sel = document.getElementById("railRoute");
+    if(sel && keepSel){ sel.value = keepSel; RAIL_ROUTE.selected = keepSel; }
+  }
+}
+if(!lq) return;
+if(SELECTED_MODE === "RAIL" && SELECTED_RAIL_EQ === "COMPARE" && currentCompareMatches){
+  runRailCompare(lq.originFac, lq.destCity, lq.destState, lq.destZip, currentCompareMatches.miles);
+  return;
+}
+if(currentMatch){
+  const miles = (window._matchData && window._matchData.miles != null) ? window._matchData.miles : null;
+  displayResults(currentMatch, miles);
+  renderEcaComparison(currentMatch, lq.originFac, lq.destZip, lq.destCity, lq.destState, miles);
+}
 }
 // Fuel $/mi in the lane's currency. USD lanes: (DOE - base) / mpg, rounded to
 // the cent. C$ lanes: that USD $/mi x USD/CAD, rounded to the cent. null when
@@ -2164,10 +2264,13 @@ const hasActual = Object.keys(actualByName).length > 0;
 if(!hasActual && !canEstimate){ card.style.display = "none"; return; }
 
 const myQuery = window._lastQuery;
-const rate = Number(match && match.rate) || 0;
-const minCharge = Number(match && match.minCharge) || 0;
-const cur = (match && match.currency) || "USD";
-const gpTotal = isRail ? railFlat : (match ? _gpTotalForCompare(match, miles) : 0);
+const nativeCur = (match && match.currency) || "USD";
+const cur = resolveQuoteCurrency(nativeCur);
+const rate = toQuoteAmount(Number(match && match.rate) || 0, nativeCur, cur);
+const minCharge = toQuoteAmount(Number(match && match.minCharge) || 0, nativeCur, cur);
+const gpTotalNative = isRail ? railFlat : (match ? _gpTotalForCompare(match, miles) : 0);
+const gpTotal = toQuoteAmount(gpTotalNative, nativeCur, cur);
+const railRPMDisp = (railRPM != null) ? toQuoteAmount(railRPM, nativeCur, cur) : null;
 
 MSF.ecaKind = isRail ? (RAIL_GROUP_MSF[railEquipGroup(match.equip)] || "cb") : "truck";
 vsGp.dataset.total = gpTotal > 0 ? String(gpTotal) : ""; vsGp.dataset.cur = cur;
@@ -2186,7 +2289,7 @@ comps.forEach((c, i) => {
   const cm = milesArr[i];
   const actual = actualByName[c.name];
   if(actual){
-    const est = actual.flat;
+    const est = toQuoteAmount(actual.flat, actual.currency || nativeCur, cur);
     rows.push({
       name: c.name,
       loc: _titleCase(c.city)+", "+c.state,
@@ -2201,7 +2304,7 @@ comps.forEach((c, i) => {
   if(!canEstimate){ return; }
   if(cm == null){ noRoute++; return; }
   const est = isRail
-    ? (railRPM * cm)
+    ? ((railRPMDisp != null ? railRPMDisp : 0) * cm)
     : (Math.max(rate * cm, minCharge) + truckFuelFor(cm, cur));
   rows.push({ name:c.name, loc:_titleCase(c.city)+", "+c.state, miles:cm, est, delta: est - gpTotal, quoted:false, railroad:"" });
 });
@@ -2234,7 +2337,7 @@ let noteMethod = "";
 if(nQuoted){
   noteMethod = '<div class="eca-note">'+nQuoted+" competitor lane"+(nQuoted>1?"s":"")+" from Rate Update Work (ECA Rail Rates)."+(nEst ? " "+nEst+" other"+(nEst>1?"s":"")+" estimated from GP $/mi × competitor miles." : "")+"</div>";
 }else if(isRail){
-  noteMethod = '<div class="eca-note">Rail estimate uses GP\'s implied '+fmt(railRPM, cur)+"/mi (lane total ÷ "+miles+" mi) applied to each competitor's distance — fuel included.</div>";
+  noteMethod = '<div class="eca-note">Rail estimate uses GP\'s implied '+fmt(railRPMDisp, cur)+"/mi (lane total ÷ "+miles+" mi) applied to each competitor's distance — fuel included.</div>";
 }else{
   const fpm = fscPerMile(cur);
   noteMethod = '<div class="eca-note">Truck estimate uses GP\'s '+fmt(rate, cur)+"/mi (min "+fmt(minCharge, cur)+") × each competitor's miles"
@@ -2590,6 +2693,7 @@ badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
 rateTypeBadge.textContent = "";
 content.innerHTML = '<div class="no-results">No rate found for this origin/destination with the current filters.</div>';
 msfPrepare(null);
+const _qcp = document.getElementById("quoteCurPanel"); if(_qcp) _qcp.hidden = true;
 return;
 }
 const quality = (match.via && match.via.kind !== "alias") ? "partial" : match.score>=30 ? "exact" : match.score>=20 ? "partial" : "estimated";
@@ -2605,28 +2709,44 @@ const isBTrain = match.mode === "TRUCK" && isBTrainEquip(match.equip);
 const isAllIn = isRail || isBTrain || Boolean(match.customer);
 const equipLabel = match.equip ? ` &nbsp;·&nbsp; <span style="font-size:11px;color:#475569;font-weight:600;">${match.equip}</span>` : "";
 rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left:4px;">${isMI ? "Per Mile" : "Flat Charge"}${equipLabel}${match.customer ? " · " + match.customer : ""}${match.via ? " · " + _escHtml(railViaShort(match.via)) : ""}</span>`;
-const currency = match.currency || "USD";
-const gpRate = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
-const minCharge = Number(match.minCharge)||0;
+const nativeCur = match.currency || "USD";
+const currency = resolveQuoteCurrency(nativeCur);  // display currency (CAD->USD when toggled)
+showQuoteCurPanel(nativeCur);
+const gpRateNative = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
+const minChargeNative = Number(match.minCharge)||0;
 const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
-const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : null;
 const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
 const milesFailed = isMI && miles==null;
-const gpAvg = isMI ? gpRate*milesActual : gpRate;
-// Rail, B-Train and customer rates already include fuel - don't add it again.
-// Truck fuel = DOE $/mi x Google miles (never the ~500 mi estimate); when miles
-// or the DOE price are missing, fuel is shown as unavailable (null), not $0.
-const fuelPerMile = isAllIn ? null : fscPerMile(currency);
+// Convert linehaul to display currency. Fuel for CAD->USD uses the USD DOE
+// $/mi directly ((DOE-base)/mpg), which equals CAD fuel / usdcad.
+const gpRate = toQuoteAmount(gpRateNative, nativeCur, currency);
+const minCharge = toQuoteAmount(minChargeNative, nativeCur, currency);
+const gpAvgNative = isMI ? gpRateNative*milesActual : gpRateNative;
+const gpAvg = toQuoteAmount(gpAvgNative, nativeCur, currency);
+const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : null;
 const fuelMiles = (miles != null && miles > 0) ? miles : null;
-const gpFuel = isAllIn ? 0 : ((fuelPerMile != null && fuelMiles != null) ? fuelPerMile * fuelMiles : null);
+let fuelPerMile = null, gpFuel = null;
+if(isAllIn){
+  fuelPerMile = null; gpFuel = 0;
+}else if(String(nativeCur).toUpperCase() === "CAD" && currency === "USD"){
+  fuelPerMile = fscPerMile("USD");
+  gpFuel = (fuelPerMile != null && fuelMiles != null) ? fuelPerMile * fuelMiles : null;
+}else{
+  fuelPerMile = fscPerMile(nativeCur);
+  if(fuelPerMile != null && currency !== String(nativeCur).toUpperCase()){
+    fuelPerMile = toQuoteAmount(fuelPerMile, nativeCur, currency);
+  }
+  gpFuel = (fuelPerMile != null && fuelMiles != null) ? fuelPerMile * fuelMiles : null;
+}
 const fuelMissing = !isAllIn && gpFuel == null;
+const fuelLabelCur = (String(nativeCur).toUpperCase() === "CAD" && currency === "USD") ? "USD" : nativeCur;
 const fuelNote = isAllIn ? "" : (!fuelMissing
-  ? `Fuel: ${fmt(fuelPerMile,currency)}/mi × ${fuelMiles} mi (${fscSourceLabel(currency)})`
-  : (fuelPerMile == null ? fscMissingNote(currency) : "Google miles unavailable — can't price fuel; total excludes fuel"));
+  ? `Fuel: ${fmt(fuelPerMile,currency)}/mi × ${fuelMiles} mi (${fscSourceLabel(fuelLabelCur)})`
+  : (fuelPerMile == null ? fscMissingNote(nativeCur) : "Google miles unavailable — can't price fuel; total excludes fuel"));
 // Rate Per Mile is shown ALL-IN, per user: Total Freight (avg + fuel) / miles.
 const rpmMiles = isMI ? milesActual : miles;
 const gpAllInRPM = (rpmMiles && rpmMiles > 0) ? (gpAvg + (gpFuel || 0)) / rpmMiles : null;
-window._matchData = { type:"single", isMI, isRail: isAllIn, gpRate, minCharge, currency, gpAvg, gpFuel, derivedRPM, rpmMiles, fuelMissing };
+window._matchData = { type:"single", isMI, isRail: isAllIn, gpRate, minCharge, currency, nativeCur, gpAvg, gpFuel, derivedRPM, rpmMiles, fuelMissing, miles };
 const milesNote = milesFailed
 ? ' <span style="font-size:11px;color:#d97706;font-style:italic;">(Google miles unavailable — using estimate)</span>'
 : (isMI && miles!=null)
@@ -2713,6 +2833,7 @@ badge.innerHTML = '<span class="match-badge match-none">No Match Found</span>';
 rateTypeBadge.textContent = "";
 content.innerHTML = railRuleNoteHTML(originFac, lane) + '<div class="no-results">No ' + _escHtml(groupNames.join(" or ").toLowerCase()) + ' rates found for this origin/destination.</div>';
 msfPrepare(null);
+const _qcp = document.getElementById("quoteCurPanel"); if(_qcp) _qcp.hidden = true;
 return;
 }
 badge.innerHTML = RAIL_VIA && RAIL_VIA.kind !== "alias" ? '<span class="match-badge match-partial">\u2248 Compare Mode (via nearby station)</span>' : '<span class="match-badge match-exact">Compare Mode</span>';
@@ -2723,11 +2844,18 @@ if(selRoute && RAIL_ROUTE.options.length){
 const cheapest = RAIL_ROUTE.options[0];
 routeNote = cheapest.key === selRoute.key
   ? `<div class="rail-route-note">Route picked: <strong>${_escHtml(railRouteLabel(selRoute))}</strong> (cheapest route on file).</div>`
-  : `<div class="rail-route-note">Route picked: <strong>${_escHtml(railRouteLabel(selRoute))}</strong> \u2014 not the cheapest. Cheapest on file: ${_escHtml(railRouteLabel(cheapest))} at ${_fmtShort(cheapest.best, cheapest.currency)}.</div>`;
+  : `<div class="rail-route-note">Route picked: <strong>${_escHtml(railRouteLabel(selRoute))}</strong> \u2014 not the cheapest. Cheapest on file: ${_escHtml(railRouteLabel(cheapest))} at ${_fmtShort(quoteDispAmt(cheapest.best, cheapest.currency), quoteDispCur(cheapest.currency))}.</div>`;
 }
 
 // Winner: cheapest shown group vs each other shown group that has a rate.
-const priced = groups.filter(g => found[g]).map(g => ({ g, m:found[g], cur:found[g].currency || "USD", total:Number(found[g].flat) || 0 }));
+const _railNativeCur = (groups.map(g => found[g]).find(Boolean) || {}).currency || "USD";
+showQuoteCurPanel(_railNativeCur);
+const priced = groups.filter(g => found[g]).map(g => {
+  const nativeCur = found[g].currency || "USD";
+  const cur = resolveQuoteCurrency(nativeCur);
+  const total = toQuoteAmount(Number(found[g].flat) || 0, nativeCur, cur);
+  return { g, m:found[g], nativeCur, cur, total };
+});
 let winnerNote = "";
 if(priced.length >= 2){
 const sorted = priced.slice().sort((a, b) => a.total - b.total);
@@ -2742,13 +2870,16 @@ const MSF_CELL_ID = { BOXCAR:"msfBox", CENTERBEAM:"msfCb", FLATCAR:"msfFlat" };
 
 const cardHtml = (grp, m) => {
 const label = RAIL_GROUP_LABEL[grp];
-const cur = (m && m.currency) || "USD";
-const total = m ? (Number(m.flat) || 0) : null;
+const nativeCur = (m && m.currency) || "USD";
+const cur = resolveQuoteCurrency(nativeCur);
+const totalNative = m ? (Number(m.flat) || 0) : null;
+const total = (totalNative == null) ? null : toQuoteAmount(totalNative, nativeCur, cur);
 if(!m) return `<div class="compare-card"><div class="compare-title">${label}</div><div style="padding:16px;color:var(--text-muted);font-size:13px;">No rate found.</div></div>`;
 const routeArrows = _routeArrows(m.route);
 const split = m.carrierSplit || "";
-const ssum = _splitSum(split);
-const gap = (ssum != null) ? (total - ssum) : 0;
+const ssum = _splitSum(split);  // native currency amounts in carrier split
+const gapNative = (ssum != null && totalNative != null) ? (totalNative - ssum) : 0;
+const gap = toQuoteAmount(gapNative, nativeCur, cur);
 let feesRow = "";
 if(gap >= 0.02) feesRow = `<div class="truck-rail-row"><span class="truck-rail-label">+ Other fees</span><span class="truck-rail-value">${fmt(gap,cur)}</span></div>`;
 else if(gap <= -0.02) feesRow = `<div class="truck-rail-row"><span class="truck-rail-label">Adjustment</span><span class="truck-rail-value">−${fmt(Math.abs(gap),cur)}</span></div>`;
