@@ -683,9 +683,10 @@ Origin facility and Destination (City &amp; State, or Zip) are required.
 <span class="quote-cur-note" id="quoteCurNote"></span>
 </div>
 <div class="msf-panel" id="msfPanel" hidden>
-<label for="msfTable" title="$ per thousand square feet: total freight ÷ sqft per load × 1000 (actual sqft, not 3/8 basis)">$/MSF</label>
+<label for="msfTable" title="$ per thousand square feet on a 3/8&quot; basis: total freight ÷ (surface sqft × thickness factor) × 1000">$/MSF 3/8 basis</label>
 <select id="msfTable" onchange="onMsfTableChange()" title="Mill loading table (Rate Calculator)"></select>
 <span class="msf-f"><label for="msfThick">Thickness</label><select id="msfThick" onchange="onMsfChange()"></select></span>
+<span class="msf-f" id="msfGradeWrap" hidden><label for="msfGrade">Grade</label><select id="msfGrade" onchange="onMsfGradeChange()" title="Plywood 3/8-basis factors differ for BC/BB vs all other grades (RS, siding, SIF, off-grade)"><option value="OTHER">All others</option><option value="BCBB">BC / BB</option></select></span>
 <span class="msf-f" id="msfTruckWrap"><label for="msfUnitsTruck">Units/Load</label><input type="number" id="msfUnitsTruck" min="0" step="1" oninput="onMsfChange()"></span>
 <span class="msf-f" id="msfBoxWrap" hidden><label for="msfBoxLen">Boxcar</label><select id="msfBoxLen" onchange="onMsfBoxLenChange()"><option value="50">50 ft</option><option value="52">52 ft</option><option value="60">60 ft</option></select><input type="number" id="msfUnitsBox" min="0" step="1" oninput="onMsfChange()" title="Boxcar units/load"><label for="msfUnitsBox" style="font-weight:500;">units</label></span>
 <span class="msf-f" id="msfCbWrap" hidden><label for="msfUnitsCb">Centerbeam (73' CTR)</label><input type="number" id="msfUnitsCb" min="0" step="1" oninput="onMsfChange()"><label for="msfUnitsCb" style="font-weight:500;">units</label></span>
@@ -1906,11 +1907,14 @@ return c.postal ? `${base} ${c.postal}` : base;
 
 function _titleCase(s){ return (s||"").toLowerCase().replace(/\b\w/g, ch=>ch.toUpperCase()); }
 
-// ---- $/MSF (freight per thousand sq ft) ----
+// ---- $/MSF (freight per thousand sq ft, 3/8" basis) ----
 // From Matt's "Rate Calculator" sheet: sqft per unit = panels per unit x sqft
 // per panel (32 for 4x8; Clarendon 7/16-9 = 36, 7/16-10 = 40, Plywood 3/8 = 36
-// as written), sqft per load = sqft/unit x units per load (mill + equipment),
-// $/MSF = total freight / sqft per load x 1000. Actual sqft (not 3/8 basis).
+// as written), surface sqft per load = sqft/unit x units per load (mill + equipment).
+// MSF 3/8 basis = surface sqft x thickness factor / 1000.
+// $/MSF 3/8 basis = total freight / (surface sqft x factor) x 1000.
+// OSB and plywood (BC/BB vs all other grades) use Matt's 3/8-basis factors.
+// Thicknesses not in the factor table (e.g. OSB 1/4, 7/8, 5/8, 1-1/8) show "—".
 // MSF_TABLES is generated from the workbook: units = units/load by equipment
 // (VAN, TRUCK, 50/52/60 ft car, CTR = 73' centerbeam); sizes = [thickness,
 // panels per unit, sqft per panel].
@@ -1928,13 +1932,44 @@ const MSF_ORIGIN_TABLE = {
 "CAMDEN,TX":"PLYWOOD", "CORRIGAN,TX":"PLYWOOD", "DUDLEY,NC":"PLYWOOD", "GURDON,AR":"PLYWOOD",
 "MADISON,GA":"PLYWOOD", "MADISON (CPR),GA":"PLYWOOD", "PROSPERITY,SC":"PLYWOOD", "TAYLORSVILLE,MS":"PLYWOOD"
 };
-const MSF = { ctxKey:"", origin:"", table:"", thick:"", kind:"", boxLenFromCode:null, ecaKind:"" };
+const MSF = { ctxKey:"", origin:"", table:"", thick:"", grade:"OTHER", kind:"", boxLenFromCode:null, ecaKind:"" };
+// 3/8-basis factors (Matt 11/10): surface MSF × factor = MSF on a 3/8" basis.
+// 7/16-9 / 7/16-10 are Clarendon 7/16" on 4x9 / 4x10, same factor as 7/16.
+// Decimals in Matt's table are rounded; use the exact 3/8-basis fractions
+// (1.1667→7/6, 1.333→4/3, 1.666/1.667→5/3, 0.833→5/6, 1.833→11/6, 2.167→13/6)
+// so $20/MSF × 4/3 × 0.032 × 1,008 pieces = $860.16 exactly.
+const MSF_38_FACTORS = {
+  OSB: {"3/8":1,"7/16":7/6,"7/16-9":7/6,"7/16-10":7/6,"15/32":4/3,"1/2":4/3,"19/32":5/3,"23/32":2},
+  PLY_BCBB: {"1/4":5/6,"11/32":7/6,"15/32":3/2,"19/32":11/6,"23/32":13/6},
+  PLY_OTHER: {"11/32":1,"3/8":1,"15/32":4/3,"19/32":5/3,"23/32":2}
+};
 function _msfOriginKey(originFac){ return (originFac||"").split(",").slice(0,2).join(",").trim().toUpperCase(); }
+function _msfIsPlywood(){ return MSF.table === "PLYWOOD"; }
+function _msfFactorMap(){
+  if(_msfIsPlywood()) return (MSF.grade === "BCBB") ? MSF_38_FACTORS.PLY_BCBB : MSF_38_FACTORS.PLY_OTHER;
+  return MSF_38_FACTORS.OSB;
+}
+function _msfFactor(thick){
+  const t = thick || MSF.thick || "";
+  const map = _msfFactorMap();
+  if(map[t] != null) return map[t];
+  const base = t.split("-")[0];
+  return (map[base] != null) ? map[base] : null;
+}
+function _msfAllowedThicks(tkey){
+  const t = MSF_TABLES[tkey]; if(!t) return [];
+  const names = t.sizes.map(z=>z[0]);
+  if(tkey !== "PLYWOOD") return names;
+  const map = (MSF.grade === "BCBB") ? MSF_38_FACTORS.PLY_BCBB : MSF_38_FACTORS.PLY_OTHER;
+  return names.filter(n => map[n] != null);
+}
 function _msfDefaultThick(tkey){
 const t = MSF_TABLES[tkey]; if(!t) return "";
-const names = t.sizes.map(z=>z[0]);
-// Plywood defaults to 3/8" (Matt 10/7); other mills unchanged.
+const names = _msfAllowedThicks(tkey);
+if(!names.length) return "";
+// Plywood defaults to 3/8" (Matt 10/7) for all-other grades; BC/BB has no 3/8.
 if(tkey === "PLYWOOD" && names.includes("3/8")) return "3/8";
+if(tkey === "PLYWOOD" && names.includes("15/32")) return "15/32";
 return names.includes("7/16") ? "7/16" : (names.includes("15/32") ? "15/32" : (names[0]||""));
 }
 function _msfSize(){
@@ -1970,10 +2005,19 @@ function _msfFillThickSelect(){
 const sel = document.getElementById("msfThick"); if(!sel) return;
 const t = MSF_TABLES[MSF.table];
 if(!t){ sel.innerHTML = '<option value="">—</option>'; sel.disabled = true; MSF.thick = ""; return; }
+const names = _msfAllowedThicks(MSF.table);
 sel.disabled = false;
-sel.innerHTML = t.sizes.map(z=>`<option value="${z[0]}">${z[0]}"</option>`).join("");
-if(!t.sizes.some(z=>z[0] === MSF.thick)) MSF.thick = _msfDefaultThick(MSF.table);
+sel.innerHTML = names.map(n=>`<option value="${n}">${n}"</option>`).join("");
+if(!names.includes(MSF.thick)) MSF.thick = _msfDefaultThick(MSF.table);
 sel.value = MSF.thick;
+}
+function _msfSyncGradeWrap(){
+const wrap = document.getElementById("msfGradeWrap"); if(!wrap) return;
+const ply = _msfIsPlywood();
+wrap.hidden = !ply;
+if(!MSF.grade) MSF.grade = "OTHER";
+const sel = document.getElementById("msfGrade");
+if(sel) sel.value = MSF.grade;
 }
 function _msfSetUnits(id, v){ const el = document.getElementById(id); if(el) el.value = (v === "" || v == null) ? "" : String(v); }
 function _msfPrefillUnits(){
@@ -2007,7 +2051,7 @@ MSF.kind = ctx.kind;
 if(key !== MSF.ctxKey){
   if(origin !== MSF.origin){ MSF.origin = origin; MSF.table = MSF_ORIGIN_TABLE[origin] || ""; MSF.thick = _msfDefaultThick(MSF.table); }
   MSF.ctxKey = key; MSF.btrain = btrain; MSF.boxLenFromCode = boxLen;
-  _msfFillTableSelect(); _msfFillThickSelect(); _msfPrefillUnits();
+  _msfFillTableSelect(); _msfSyncGradeWrap(); _msfFillThickSelect(); _msfPrefillUnits();
 }
 document.getElementById("msfTruckWrap").hidden = ctx.kind !== "truck";
 // Rail: only the equipment this mill ships (ctx.groups from the compare view).
@@ -2016,6 +2060,7 @@ document.getElementById("msfBoxWrap").hidden = !rg.includes("BOXCAR");
 document.getElementById("msfCbWrap").hidden = !rg.includes("CENTERBEAM");
 const _fw = document.getElementById("msfFlatWrap"); if(_fw) _fw.hidden = !rg.includes("FLATCAR");
 panel.hidden = false;
+_msfSyncGradeWrap();
 _msfHint();
 }
 function _msfHint(){
@@ -2027,7 +2072,13 @@ else h.textContent = "";
 }
 function onMsfTableChange(){
 MSF.table = document.getElementById("msfTable")?.value || "";
+_msfSyncGradeWrap();
 _msfFillThickSelect(); _msfPrefillUnits(); _msfHint();
+msfRefresh();
+}
+function onMsfGradeChange(){
+MSF.grade = document.getElementById("msfGrade")?.value || "OTHER";
+_msfFillThickSelect();
 msfRefresh();
 }
 function onMsfBoxLenChange(){
@@ -2038,26 +2089,31 @@ function onMsfChange(){
 MSF.thick = document.getElementById("msfThick")?.value || MSF.thick;
 msfRefresh();
 }
-// sqft per load for "truck" | "box" | "cb" -> {sqft, units, pcs, per, thick} or null.
+// surface sqft and 3/8-basis MSF for "truck" | "box" | "cb" | "flat".
 function msfSqft(kind){
 const z = _msfSize(); if(!z) return null;
 const id = kind === "truck" ? "msfUnitsTruck" : (kind === "box" ? "msfUnitsBox" : (kind === "flat" ? "msfUnitsFlat" : "msfUnitsCb"));
 const units = Number(document.getElementById(id)?.value);
 if(!(units > 0)) return null;
-return { sqft: z[1] * z[2] * units, units, pcs: z[1], per: z[2], thick: z[0] };
+const sqft = z[1] * z[2] * units;
+const factor = _msfFactor(z[0]);
+return { sqft, units, pcs: z[1], per: z[2], thick: z[0], factor, sqft38: factor != null ? sqft * factor : null };
 }
 function msfValue(total, kind){
 const q = msfSqft(kind);
-return (q && total != null && isFinite(total) && total > 0) ? total / q.sqft * 1000 : null;
+return (q && q.sqft38 && total != null && isFinite(total) && total > 0) ? total / q.sqft38 * 1000 : null;
 }
 function msfSubtitle(kind){
 const q = msfSqft(kind);
 if(!q) return MSF_TABLES[MSF.table] ? "enter Units/Load" : "no loading table";
-return `${q.thick}" · ${q.units} units × ${q.pcs} pcs${q.per !== 32 ? " × " + q.per + " sf" : ""} · ${q.sqft.toLocaleString("en-US")} sqft`;
+if(q.factor == null) return `${q.thick}" · no 3/8-basis factor`;
+const msf38 = q.sqft38 / 1000;
+const fLabel = Number.isInteger(q.factor) ? String(q.factor) : q.factor.toFixed(4).replace(/0+$/,"").replace(/\.$/,"");
+return `${q.thick}" · ${q.units} units × ${q.pcs} pcs${q.per !== 32 ? " × " + q.per + " sf" : ""} · × ${fLabel} → ${msf38.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})} MSF 3/8`;
 }
 function msfValHTML(total, kind, currency, withSub){
 const v = msfValue(total, kind);
-return `<span class="msf-val">${v != null ? fmt(v, currency) : "—"}<span class="msf-unit">/MSF</span>${withSub ? `<span class="msf-sub">${msfSubtitle(kind)}</span>` : ""}</span>`;
+return `<span class="msf-val">${v != null ? fmt(v, currency) : "—"}<span class="msf-unit">/MSF 3/8</span>${withSub ? `<span class="msf-sub">${msfSubtitle(kind)}</span>` : ""}</span>`;
 }
 // Re-render every $/MSF on screen (quote total, rail cards, competitor table).
 function msfRefresh(){
@@ -2084,7 +2140,7 @@ document.querySelectorAll("#ecaContent .eca-msf[data-est]").forEach(td=>{
 const vs = document.getElementById("ecaVsGp");
 if(vs && vs.dataset.total){
   const v = msfValue(Number(vs.dataset.total), kind);
-  vs.textContent = "vs GP " + fmt(Number(vs.dataset.total), vs.dataset.cur || "USD") + (v != null ? " (" + fmt(v, vs.dataset.cur || "USD") + "/MSF)" : "");
+  vs.textContent = "vs GP " + fmt(Number(vs.dataset.total), vs.dataset.cur || "USD") + (v != null ? " (" + fmt(v, vs.dataset.cur || "USD") + "/MSF 3/8)" : "");
 }
 }
 
@@ -2360,7 +2416,7 @@ const renderRow = (r)=>{
     : "—";
   return "<tr><td>"+r.name+badge+'</td><td class="eca-loc">'+r.loc+'</td><td class="mono" style="text-align:right;">'+milesCell+'</td><td class="mono" style="text-align:right;">'+fmt(r.est, cur)+'</td><td class="mono eca-msf" style="text-align:right;" data-est="'+r.est+'" data-cur="'+cur+'">—</td><td class="mono '+cls+'" style="text-align:right;">'+deltaCell+"</td></tr>";
 };
-const head = '<tr><th>Competitor</th><th>Location</th><th style="text-align:right;">Miles</th><th style="text-align:right;">Total</th><th style="text-align:right;" title="Competitor total ÷ the same sqft per load as the GP quote">$/MSF</th><th style="text-align:right;">&Delta; vs GP</th></tr>';
+const head = '<tr><th>Competitor</th><th>Location</th><th style="text-align:right;">Miles</th><th style="text-align:right;">Total</th><th style="text-align:right;" title="Competitor total ÷ the same 3/8-basis MSF per load as the GP quote">$/MSF 3/8 basis</th><th style="text-align:right;">&Delta; vs GP</th></tr>';
 const TOPN = 5;
 const top = rows.slice(0, TOPN).map(renderRow).join("");
 const rest = rows.slice(TOPN).map(renderRow).join("");
@@ -2933,7 +2989,7 @@ ${m.destRR ? `<div class="truck-rail-row"><span class="truck-rail-label">Dest. r
 ${split ? `<div class="rail-route-block"><span class="truck-rail-label">Carrier split</span><div class="rail-route-val">${split}</div></div>` : ""}
 ${feesRow}
 <div class="truck-rail-row"><span class="truck-rail-label">Total Rate</span><span class="truck-rail-value">${fmt(total,cur)}</span></div>
-<div class="truck-rail-row"><span class="truck-rail-label">$/MSF</span><span class="truck-rail-value" id="${MSF_CELL_ID[grp]}">—</span></div>
+<div class="truck-rail-row"><span class="truck-rail-label">$/MSF 3/8 basis</span><span class="truck-rail-value" id="${MSF_CELL_ID[grp]}">—</span></div>
 </div>
 </div>`;
 };
@@ -3015,10 +3071,10 @@ setCell("adjAvgCell", `${fmt(adjAvg,currency)}<span class="currency-badge">${cur
 const avgPct = gpAvg > 0 ? ((adjAvg - gpAvg)/gpAvg)*100 : 0;
 setCell("diffAvg", fmtPct(avgPct), pctClass(avgPct));
 
-// $/MSF = total / sqft per load x 1000 (right side of the total cell).
+// $/MSF 3/8 basis = total / (surface sqft × factor) x 1000 (right side of the total cell).
 setCell("totalGP", `<div class="tot-flex"><span>${fmt(gpTotal,currency)}<span class="currency-badge">${currency}</span></span>${msfValHTML(gpTotal, "truck", currency, true)}</div>`);
 const _adjMsf = msfValue(adjTotal, "truck");
-setCell("totalAdj", `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span><span class="msf-mini">${_adjMsf != null ? fmt(_adjMsf,currency) : "—"} /MSF</span>`);
+setCell("totalAdj", `${fmt(adjTotal,currency)}<span class="currency-badge">${currency}</span><span class="msf-mini">${_adjMsf != null ? fmt(_adjMsf,currency) : "—"} /MSF 3/8</span>`);
 setCell("totalDiff", fmtPct(totalPct), pctClass(totalPct));
 window._lastRailTotal = adjTotal;
 }
