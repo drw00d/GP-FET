@@ -2217,11 +2217,41 @@ const f = fscPerMile(currency);
 return (f != null && miles != null && miles > 0) ? f * miles : 0;
 }
 
+// FR00 short-haul mileage bands (usually 1-150 mi) keep UOM=MI but store the
+// charge in FLAT CHARGE with RATE blank. Price those as a flat linehaul, then
+// add DOE fuel. True per-mile rows still use RATE x miles, floored at MINIMUM CHARGE.
+function truckHasPerMileRate(r){
+return !!r && (r.uom||"").toString().toUpperCase() === "MI" && Number(r.rate) > 0;
+}
+function truckLinehaul(r, miles){
+if(!r) return 0;
+const minCharge = Number(r.minCharge) || 0;
+let lh = 0;
+if(truckHasPerMileRate(r)){
+  const m = (miles != null && miles > 0) ? miles : 0;
+  lh = Number(r.rate) * m;
+}else{
+  lh = Number(r.flat) || 0;
+}
+return Math.max(lh, minCharge);
+}
+function truckTiePrice(r, miles){
+const lh = truckLinehaul(r, miles);
+return lh > 0 ? lh : Infinity;
+}
+function truckEquipPriority(code){
+const c = (code || "").toString().trim().toUpperCase();
+if(c === "48FT000") return 0;
+if(c === "48FT000HH") return 1;
+if(c === "48TP000") return 2;
+if(c === "53TF102") return 10;
+if(c === "53CN000") return 11;
+return 5;
+}
+
 function _gpTotalForCompare(match, miles){
-const rate = Number(match.rate) || 0;
 const m = (miles != null) ? miles : 0;
-const minCharge = Number(match.minCharge) || 0;
-return Math.max(rate * m, minCharge) + truckFuelFor(m, match.currency);
+return truckLinehaul(match, miles) + truckFuelFor(m, match.currency);
 }
 
 // Competitor (ECA) estimate: your same freight logic, run from each linked
@@ -2248,7 +2278,7 @@ if(!comps || !comps.length){ card.style.display = "none"; return; }
 const destCityU = (destCity||"").toString().trim().toUpperCase();
 const destStateU = (destState||"").toString().trim().toUpperCase();
 const canEstimate = !!match && (
-  (SELECTED_MODE === "TRUCK" && !isBTrainEquip(match.equip) && isMI) ||
+  (SELECTED_MODE === "TRUCK" && !isBTrainEquip(match.equip) && truckHasPerMileRate(match)) ||
   (SELECTED_MODE === "RAIL" && railRPM != null)
 );
 
@@ -2309,7 +2339,7 @@ comps.forEach((c, i) => {
   if(cm == null){ noRoute++; return; }
   const est = isRail
     ? ((railRPMDisp != null ? railRPMDisp : 0) * cm)
-    : (Math.max(rate * cm, minCharge) + truckFuelFor(cm, cur));
+    : (toQuoteAmount(truckLinehaul(match, cm), nativeCur, cur) + truckFuelFor(cm, cur));
   rows.push({ name:c.name, loc:_titleCase(c.city)+", "+c.state, miles:cm, est, delta: est - gpTotal, quoted:false, railroad:"" });
 });
 
@@ -2580,13 +2610,17 @@ if(SELECTED_MODE==="RAIL" && !railLaneGroups(originFac, destCity, destState, des
 const scored = scoreRate(r, originFac, destCity, destState, destZip);
 if(scored < 0) continue;
 if(!rateMatchesBand(r, miles)) continue;
+if(SELECTED_MODE==="TRUCK" && truckLinehaul(r, miles) <= 0) continue;
 let priority = 0;
 if(SELECTED_MODE === "RAIL"){
 priority = railGroupPriority(railEquipGroup(r.equip), r.equip);
+}else if(SELECTED_MODE === "TRUCK"){
+// 48FT000 is the standard truck equipment. Other codes (e.g. 53TF102) stay
+// eligible when no 48' rate exists, but must not beat 48FT000 on price alone.
+priority = truckEquipPriority(r.equip);
 }
-// Compare price for tiebreaking when score+priority tie (prefer cheapest)
-const isMI = (r.uom||"").toString().toUpperCase() === "MI";
-const price = isMI ? (Number(r.rate)||Infinity) : (Number(r.flat)||Infinity);
+// Compare price as a load linehaul so per-mile and flat rows tie-break fairly
+const price = (r.mode === "TRUCK") ? truckTiePrice(r, miles) : (Number(r.flat)||Infinity);
 if(
 scored > bestScore ||
 (scored === bestScore && priority < bestPriority) ||
@@ -2706,7 +2740,7 @@ badge.innerHTML = quality==="exact"
 : quality==="partial"
 ? '<span class="match-badge match-partial">≈ Partial Match</span>'
 : '<span class="match-badge match-none">~ Estimated</span>';
-const isMI = (match.uom||"").toString().toUpperCase() === "MI";
+const isMI = truckHasPerMileRate(match);
 const isRail = match.mode === "RAIL";
 const isBTrain = match.mode === "TRUCK" && isBTrainEquip(match.equip);
 // B-Train is a flat, all-in lane rate just like rail (no separate fuel line).
@@ -2716,18 +2750,18 @@ rateTypeBadge.innerHTML = `<span style="font-size:12px;color:#1e293b;margin-left
 const nativeCur = match.currency || "USD";
 const currency = resolveQuoteCurrency(nativeCur);  // display currency (CAD->USD when toggled)
 showQuoteCurPanel(nativeCur);
-const gpRateNative = isMI ? (Number(match.rate)||0) : (Number(match.flat)||0);
 const minChargeNative = Number(match.minCharge)||0;
 const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
 const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
 const milesFailed = isMI && miles==null;
+const gpAvgNative = truckLinehaul(match, isMI ? milesActual : miles);
+const gpRateNative = isMI ? (Number(match.rate)||0) : gpAvgNative;
 // Linehaul is converted with toQuoteAmount. A CAD row shown in USD prices
 // fuel at the USD DOE $/mi, (DOE - base) / mpg, instead of dividing the
 // cent-rounded C$ fuel by usdcad. Those two $/mi figures differ after that
 // rounding (fscPerMile rounds the C$ figure to the cent first).
 const gpRate = toQuoteAmount(gpRateNative, nativeCur, currency);
 const minCharge = toQuoteAmount(minChargeNative, nativeCur, currency);
-const gpAvgNative = isMI ? gpRateNative*milesActual : gpRateNative;
 const gpAvg = toQuoteAmount(gpAvgNative, nativeCur, currency);
 const derivedRPM = (!isMI && miles != null && miles > 0) ? (gpRate / miles) : null;
 const fuelMiles = (miles != null && miles > 0) ? miles : null;
