@@ -2100,9 +2100,13 @@ const fx = FSC ? Number(FSC.usdcad) : NaN;
 return (fx > 0 && isFinite(fx)) ? fx : null;
 }
 // ---- Quote display currency (CAD lanes only) ----
-// Native rate currency stays CAD in rates.json. When the user picks USD, money
-// figures are converted with fsc.usdcad (CAD per 1 USD; USD = CAD / usdcad).
-// Preference remembered in localStorage; USD option hidden if usdcad missing.
+// Follows the matched row's currency, not the origin country. USD rows stay
+// USD, including Canadian-origin rail. The control is shown only for CAD
+// rows (truck rates). In this file those origins are Earltion ON,
+// Englehart ON, Hamilton ON, and Beamsville ON. Native amounts stay CAD in
+// rates.json. Choosing USD divides by fsc.usdcad (CAD per 1 USD, the Bank
+// of Canada daily average stored on fsc). The choice is remembered in
+// localStorage. The whole control is hidden when usdcad is missing.
 function resolveQuoteCurrency(nativeCur){
 const n = String(nativeCur || "USD").toUpperCase();
 if(n !== "CAD") return n;
@@ -2717,8 +2721,10 @@ const minChargeNative = Number(match.minCharge)||0;
 const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
 const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
 const milesFailed = isMI && miles==null;
-// Convert linehaul to display currency. Fuel for CAD->USD uses the USD DOE
-// $/mi directly ((DOE-base)/mpg), which equals CAD fuel / usdcad.
+// Linehaul is converted with toQuoteAmount. A CAD row shown in USD prices
+// fuel at the USD DOE $/mi, (DOE - base) / mpg, instead of dividing the
+// cent-rounded C$ fuel by usdcad. Those two $/mi figures differ after that
+// rounding (fscPerMile rounds the C$ figure to the cent first).
 const gpRate = toQuoteAmount(gpRateNative, nativeCur, currency);
 const minCharge = toQuoteAmount(minChargeNative, nativeCur, currency);
 const gpAvgNative = isMI ? gpRateNative*milesActual : gpRateNative;
