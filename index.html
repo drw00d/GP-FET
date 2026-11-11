@@ -1908,13 +1908,24 @@ return c.postal ? `${base} ${c.postal}` : base;
 function _titleCase(s){ return (s||"").toLowerCase().replace(/\b\w/g, ch=>ch.toUpperCase()); }
 
 // ---- $/MSF (freight per thousand sq ft, 3/8" basis) ----
+// A 3/8" basis restates the load as the surface area that wood would cover
+// if it were 3/8" thick, so freight per thousand sq ft can be compared across
+// thicknesses. Thicker stock counts as more MSF. The thickness factor is that
+// restatement (surface MSF x factor = 3/8-basis MSF). It is Matt's mill table
+// (MSF_38_FACTORS), not nominal thickness / 3/8".
 // From Matt's "Rate Calculator" sheet: sqft per unit = panels per unit x sqft
-// per panel (32 for 4x8, including plywood 3/8; Clarendon 7/16-9 = 36, 7/16-10 = 40),
+// per panel. A 4x8 sheet is 4 x 8 = 32 sq ft of surface. Every 4x8 row uses
+// 32, including plywood 3/8 (that row is a 4x8, not a 36 sq ft sheet).
+// Clarendon 7/16-9 is a 4x9 (36 sq ft) and 7/16-10 is a 4x10 (40 sq ft).
 // surface sqft per load = sqft/unit x units per load (mill + equipment).
 // MSF 3/8 basis = surface sqft x thickness factor / 1000.
 // $/MSF 3/8 basis = total freight / (surface sqft x factor) x 1000.
-// OSB and plywood (BC/BB vs all other grades) use Matt's 3/8-basis factors.
-// Thicknesses not in the factor table (e.g. OSB 1/4, 7/8, 5/8, 1-1/8) show "—".
+// OSB mills share one factor map. Plywood uses two: BC/BB, and all other
+// grades (RS, siding, SIF, off-grade).
+// OSB thicknesses with no factor (1/4, 7/8, 5/8, 1-1/8) stay selectable and
+// $/MSF shows "—". Plywood thicknesses with no factor for the selected grade
+// are omitted from the Thickness list (BC/BB has no 3/8; other grades have
+// no 1/4), rather than offered as a dash.
 // MSF_TABLES is generated from the workbook: units = units/load by equipment
 // (VAN, TRUCK, 50/52/60 ft car, CTR = 73' centerbeam); sizes = [thickness,
 // panels per unit, sqft per panel].
@@ -1934,10 +1945,21 @@ const MSF_ORIGIN_TABLE = {
 };
 const MSF = { ctxKey:"", origin:"", table:"", thick:"", grade:"OTHER", kind:"", boxLenFromCode:null, ecaKind:"" };
 // 3/8-basis factors (Matt 11/10): surface MSF × factor = MSF on a 3/8" basis.
+// Do not recompute a key as nominal / 3/8". OSB groups the odd nominals with
+// the standard thickness in Matt's table:
+//   3/8 = 1, 7/16 = 7/6 (7/16 / 3/8)
+//   15/32 and 1/2 are both 4/3 (1/2 / 3/8), not 15/32 / 3/8 = 5/4
+//   19/32 = 5/3 (5/8 / 3/8), not 19/32 / 3/8 = 19/12
+//   23/32 = 2 (3/4 / 3/8), not 23/32 / 3/8 = 23/12
+// Plywood "all others" uses that same grouping and also treats 11/32 as 3/8
+// (factor 1, not 11/32 / 3/8 = 11/12). BC/BB is a different column and has no
+// 3/8" row: 1/4 = 5/6, 11/32 = 7/6, 15/32 = 3/2, 19/32 = 11/6, 23/32 = 13/6.
+// Those BC/BB values are not nominal / 3/8" either (1/4 would be 2/3, not 5/6).
 // 7/16-9 / 7/16-10 are Clarendon 7/16" on 4x9 / 4x10, same factor as 7/16.
-// Decimals in Matt's table are rounded; use the exact 3/8-basis fractions
-// (1.1667→7/6, 1.333→4/3, 1.666/1.667→5/3, 0.833→5/6, 1.833→11/6, 2.167→13/6)
-// so $20/MSF × 4/3 × 0.032 × 1,008 pieces = $860.16 exactly.
+// Where Matt printed a rounded decimal, store the fraction he was rounding
+// (1.1667→7/6, 1.333→4/3, 1.666/1.667→5/3, 0.833→5/6, 1.833→11/6, 2.167→13/6).
+// 0.032 is one 4x8 sheet in MSF (32 sq ft / 1000), so
+// $20/MSF × 4/3 × 0.032 × 1,008 pieces = $860.16 exactly. Using 1.333 does not.
 const MSF_38_FACTORS = {
   OSB: {"3/8":1,"7/16":7/6,"7/16-9":7/6,"7/16-10":7/6,"15/32":4/3,"1/2":4/3,"19/32":5/3,"23/32":2},
   PLY_BCBB: {"1/4":5/6,"11/32":7/6,"15/32":3/2,"19/32":11/6,"23/32":13/6},
@@ -1946,6 +1968,7 @@ const MSF_38_FACTORS = {
 function _msfOriginKey(originFac){ return (originFac||"").split(",").slice(0,2).join(",").trim().toUpperCase(); }
 function _msfIsPlywood(){ return MSF.table === "PLYWOOD"; }
 function _msfFactorMap(){
+  // Plywood: BC/BB vs every other grade. OSB mills share one map.
   if(_msfIsPlywood()) return (MSF.grade === "BCBB") ? MSF_38_FACTORS.PLY_BCBB : MSF_38_FACTORS.PLY_OTHER;
   return MSF_38_FACTORS.OSB;
 }
@@ -1953,13 +1976,16 @@ function _msfFactor(thick){
   const t = thick || MSF.thick || "";
   const map = _msfFactorMap();
   if(map[t] != null) return map[t];
+  // "7/16-9" uses the 7/16 factor when that sheet size is not its own key.
   const base = t.split("-")[0];
   return (map[base] != null) ? map[base] : null;
 }
 function _msfAllowedThicks(tkey){
   const t = MSF_TABLES[tkey]; if(!t) return [];
   const names = t.sizes.map(z=>z[0]);
+  // OSB keeps thicknesses that have no factor; $/MSF then shows "—".
   if(tkey !== "PLYWOOD") return names;
+  // Plywood only lists thicknesses that have a factor for this grade.
   const map = (MSF.grade === "BCBB") ? MSF_38_FACTORS.PLY_BCBB : MSF_38_FACTORS.PLY_OTHER;
   return names.filter(n => map[n] != null);
 }
@@ -2089,7 +2115,9 @@ function onMsfChange(){
 MSF.thick = document.getElementById("msfThick")?.value || MSF.thick;
 msfRefresh();
 }
-// surface sqft and 3/8-basis MSF for "truck" | "box" | "cb" | "flat".
+// surface sqft and 3/8-basis sqft for "truck" | "box" | "cb" | "flat".
+// sqft is panels x sqft/panel x units. sqft38 is null when this thickness
+// has no factor (OSB shows "—"; plywood never offers that thickness).
 function msfSqft(kind){
 const z = _msfSize(); if(!z) return null;
 const id = kind === "truck" ? "msfUnitsTruck" : (kind === "box" ? "msfUnitsBox" : (kind === "flat" ? "msfUnitsFlat" : "msfUnitsCb"));
@@ -2099,6 +2127,9 @@ const sqft = z[1] * z[2] * units;
 const factor = _msfFactor(z[0]);
 return { sqft, units, pcs: z[1], per: z[2], thick: z[0], factor, sqft38: factor != null ? sqft * factor : null };
 }
+// $ per 3/8-basis MSF = total freight / (surface sqft x factor) x 1000.
+// Null (the UI shows "—") when sqft38 is missing or total is not a positive
+// finite freight amount.
 function msfValue(total, kind){
 const q = msfSqft(kind);
 return (q && q.sqft38 && total != null && isFinite(total) && total > 0) ? total / q.sqft38 * 1000 : null;
@@ -2158,7 +2189,7 @@ return (fx > 0 && isFinite(fx)) ? fx : null;
 // ---- Quote display currency (CAD lanes only) ----
 // Follows the matched row's currency, not the origin country. USD rows stay
 // USD, including Canadian-origin rail. The control is shown only for CAD
-// rows (truck rates). In this file those origins are Earltion ON,
+// rows (truck rates). In the current rate file those origins are Earlton ON,
 // Englehart ON, Hamilton ON, and Beamsville ON. Native amounts stay CAD in
 // rates.json. Choosing USD divides by fsc.usdcad (CAD per 1 USD, the Bank
 // of Canada daily average stored on fsc). The choice is remembered in
@@ -2273,9 +2304,15 @@ const f = fscPerMile(currency);
 return (f != null && miles != null && miles > 0) ? f * miles : 0;
 }
 
-// FR00 short-haul mileage bands (usually 1-150 mi) keep UOM=MI but store the
-// charge in FLAT CHARGE with RATE blank. Price those as a flat linehaul, then
-// add DOE fuel. True per-mile rows still use RATE x miles, floored at MINIMUM CHARGE.
+// FR00 mileage-band rows stay UOM=MI. The short bands (mostly 1-50, 51-100,
+// and 101-150 mi) leave RATE blank and put the dollars in FLAT CHARGE.
+// The quote used to treat every MI row as RATE x miles. A blank RATE is 0,
+// so a band that matched still priced linehaul at $0 and then added only
+// DOE fuel. Blank RATE is not a per-mile rate: linehaul is FLAT CHARGE.
+// A real per-mile row (UOM=MI and RATE > 0) is RATE x miles. Both paths are
+// then raised to MINIMUM CHARGE when that minimum is higher. findRate drops
+// a truck row that is still <= $0, so an empty band cannot be the match.
+// DOE fuel is added on top of this linehaul for truck lanes that are not all-in.
 function truckHasPerMileRate(r){
 return !!r && (r.uom||"").toString().toUpperCase() === "MI" && Number(r.rate) > 0;
 }
@@ -2292,9 +2329,16 @@ if(truckHasPerMileRate(r)){
 return Math.max(lh, minCharge);
 }
 function truckTiePrice(r, miles){
+// Load linehaul in dollars, so a $/mi row and a short-haul flat are compared
+// as a load. $0 is not a real cost and must not win the tie.
 const lh = truckLinehaul(r, miles);
 return lh > 0 ? lh : Infinity;
 }
+// Tie-break only, after the geographic score. Lower wins.
+// 48FT000 (0) is the standard van, then 48FT000HH (1), then 48TP000 (2).
+// Any other code is 5. 53TF102 (10) and 53CN000 (11) rank last, so a cheaper
+// 53' cannot beat 48FT000 or an unspecified code when the match score is tied.
+// A 53' row is still used when it is the only equipment that matches.
 function truckEquipPriority(code){
 const c = (code || "").toString().trim().toUpperCase();
 if(c === "48FT000") return 0;
@@ -2312,8 +2356,10 @@ return truckLinehaul(match, miles) + truckFuelFor(m, match.currency);
 
 // Competitor (ECA) estimate: your same freight logic, run from each linked
 // competitor's own location to the destination.
-//   TRUCK: standard per-mile lanes — apply GP's per-mile rate + DOE fuel $/mi
-//          over the competitor's drive distance (B-Train flat lanes are skipped).
+//   TRUCK: true per-mile lanes only (RATE > 0). Apply that RATE x the
+//          competitor's miles, floored at MINIMUM CHARGE, plus DOE fuel.
+//          B-Train flats and short-haul bands (UOM=MI, RATE blank, dollars in
+//          FLAT CHARGE) are not stretched across a competitor's miles.
 //   RAIL:  all-in flat lanes — derive GP's implied $/mi (flat total ÷ GP miles)
 //          and apply it over the competitor's distance (fuel already included,
 //          so no separate fuel line). Needs GP Google miles to set the yardstick.
@@ -2666,13 +2712,17 @@ if(SELECTED_MODE==="RAIL" && !railLaneGroups(originFac, destCity, destState, des
 const scored = scoreRate(r, originFac, destCity, destState, destZip);
 if(scored < 0) continue;
 if(!rateMatchesBand(r, miles)) continue;
+// A short-haul band with a flat charge stays. Drop a truck row that is still
+// $0 linehaul (blank flat, or a per-mile RATE with no miles and no minimum)
+// so that empty row cannot win the band.
 if(SELECTED_MODE==="TRUCK" && truckLinehaul(r, miles) <= 0) continue;
 let priority = 0;
 if(SELECTED_MODE === "RAIL"){
 priority = railGroupPriority(railEquipGroup(r.equip), r.equip);
 }else if(SELECTED_MODE === "TRUCK"){
-// 48FT000 is the standard truck equipment. Other codes (e.g. 53TF102) stay
-// eligible when no 48' rate exists, but must not beat 48FT000 on price alone.
+// Same geographic score: lower truckEquipPriority wins, then cheaper load
+// linehaul. 48FT000 beats the other truck codes on that tie, including a
+// cheaper 53'. Those other codes stay eligible when no 48' row matches.
 priority = truckEquipPriority(r.equip);
 }
 // Compare price as a load linehaul so per-mile and flat rows tie-break fairly
