@@ -2313,6 +2313,11 @@ return (f != null && miles != null && miles > 0) ? f * miles : 0;
 // then raised to MINIMUM CHARGE when that minimum is higher. findRate drops
 // a truck row that is still <= $0, so an empty band cannot be the match.
 // DOE fuel is added on top of this linehaul for truck lanes that are not all-in.
+// When Google miles is missing, the quote prices a per-mile row at this
+// distance and labels it "~500 (est.)". findRate uses the same distance for
+// the mileage band and the linehaul. The null miles value is what the quote
+// still receives, so that note stays.
+const TRUCK_MILES_ESTIMATE = 500;
 function truckHasPerMileRate(r){
 return !!r && (r.uom||"").toString().toUpperCase() === "MI" && Number(r.rate) > 0;
 }
@@ -2404,8 +2409,18 @@ const nativeCur = (match && match.currency) || "USD";
 const cur = resolveQuoteCurrency(nativeCur);
 const rate = toQuoteAmount(Number(match && match.rate) || 0, nativeCur, cur);
 const minCharge = toQuoteAmount(Number(match && match.minCharge) || 0, nativeCur, cur);
-const gpTotalNative = isRail ? railFlat : (match ? _gpTotalForCompare(match, miles) : 0);
-const gpTotal = toQuoteAmount(gpTotalNative, nativeCur, cur);
+// A CAD truck row shown in USD adds fuel at the USD DOE $/mi on the quote,
+// (DOE - base) / mpg. vs GP uses that same $/mi. Dividing the cent-rounded
+// C$ fuel by usdcad does not match. B-Train and customer rows are all-in on
+// the quote, so they keep the native total.
+let gpTotal;
+if(!isRail && match && String(nativeCur).toUpperCase() === "CAD" && cur === "USD"
+   && !isBTrainEquip(match.equip) && !match.customer){
+  gpTotal = toQuoteAmount(truckLinehaul(match, miles), nativeCur, cur) + truckFuelFor(miles, "USD");
+}else{
+  const gpTotalNative = isRail ? railFlat : (match ? _gpTotalForCompare(match, miles) : 0);
+  gpTotal = toQuoteAmount(gpTotalNative, nativeCur, cur);
+}
 const railRPMDisp = (railRPM != null) ? toQuoteAmount(railRPM, nativeCur, cur) : null;
 
 MSF.ecaKind = isRail ? (RAIL_GROUP_MSF[railEquipGroup(match.equip)] || "cb") : "truck";
@@ -2699,6 +2714,11 @@ return miles >= bMin && miles <= bMax;
 }
 
 function findRate(originFac, destCity, destState, destZip, miles){
+// Truck band choice and per-mile linehaul share TRUCK_MILES_ESTIMATE when
+// Google miles is missing. Null miles used to accept every band and price a
+// per-mile row with no minimum at $0, so findRate dropped it and a short-haul
+// flat could win. Rail still sees the original miles.
+const milesForMatch = (SELECTED_MODE === "TRUCK" && miles == null) ? TRUCK_MILES_ESTIMATE : miles;
 let best=null, bestScore=-1, bestPriority=999, bestPrice=Infinity;
 for(const r of RATES){
 if(r.mode !== SELECTED_MODE) continue;
@@ -2711,11 +2731,11 @@ if(SELECTED_MODE==="TRUCK" && !truckEquipMatches(r)) continue;
 if(SELECTED_MODE==="RAIL" && !railLaneGroups(originFac, destCity, destState, destZip).groups.includes(railEquipGroup(r.equip))) continue;
 const scored = scoreRate(r, originFac, destCity, destState, destZip);
 if(scored < 0) continue;
-if(!rateMatchesBand(r, miles)) continue;
-// A short-haul band with a flat charge stays. Drop a truck row that is still
-// $0 linehaul (blank flat, or a per-mile RATE with no miles and no minimum)
-// so that empty row cannot win the band.
-if(SELECTED_MODE==="TRUCK" && truckLinehaul(r, miles) <= 0) continue;
+if(!rateMatchesBand(r, milesForMatch)) continue;
+// Drop a truck row that is still $0 linehaul (blank flat, or a per-mile RATE
+// that prices to nothing at milesForMatch). A short-haul flat whose band
+// covers those miles stays.
+if(SELECTED_MODE==="TRUCK" && truckLinehaul(r, milesForMatch) <= 0) continue;
 let priority = 0;
 if(SELECTED_MODE === "RAIL"){
 priority = railGroupPriority(railEquipGroup(r.equip), r.equip);
@@ -2726,7 +2746,7 @@ priority = railGroupPriority(railEquipGroup(r.equip), r.equip);
 priority = truckEquipPriority(r.equip);
 }
 // Compare price as a load linehaul so per-mile and flat rows tie-break fairly
-const price = (r.mode === "TRUCK") ? truckTiePrice(r, miles) : (Number(r.flat)||Infinity);
+const price = (r.mode === "TRUCK") ? truckTiePrice(r, milesForMatch) : (Number(r.flat)||Infinity);
 if(
 scored > bestScore ||
 (scored === bestScore && priority < bestPriority) ||
@@ -2857,7 +2877,7 @@ const nativeCur = match.currency || "USD";
 const currency = resolveQuoteCurrency(nativeCur);  // display currency (CAD->USD when toggled)
 showQuoteCurPanel(nativeCur);
 const minChargeNative = Number(match.minCharge)||0;
-const milesActual = (isMI && miles!=null) ? miles : (isMI ? 500 : 0);
+const milesActual = (isMI && miles!=null) ? miles : (isMI ? TRUCK_MILES_ESTIMATE : 0);
 const milesLabel = (miles!=null) ? miles : (isMI ? "~500 (est.)" : "—");
 const milesFailed = isMI && miles==null;
 const gpAvgNative = truckLinehaul(match, isMI ? milesActual : miles);
