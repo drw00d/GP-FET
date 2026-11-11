@@ -2354,9 +2354,16 @@ if(c === "53CN000") return 11;
 return 5;
 }
 
+function truckLinehaulMiles(r, miles){
+// Quote prices a per-mile row at TRUCK_MILES_ESTIMATE when Google miles is
+// missing. vs GP uses that same distance for linehaul. Fuel stays on the
+// real miles, so a missing distance still excludes fuel and the totals match.
+if(truckHasPerMileRate(r) && miles == null) return TRUCK_MILES_ESTIMATE;
+return miles;
+}
 function _gpTotalForCompare(match, miles){
 const m = (miles != null) ? miles : 0;
-return truckLinehaul(match, miles) + truckFuelFor(m, match.currency);
+return truckLinehaul(match, truckLinehaulMiles(match, miles)) + truckFuelFor(m, match.currency);
 }
 
 // Competitor (ECA) estimate: your same freight logic, run from each linked
@@ -2416,7 +2423,7 @@ const minCharge = toQuoteAmount(Number(match && match.minCharge) || 0, nativeCur
 let gpTotal;
 if(!isRail && match && String(nativeCur).toUpperCase() === "CAD" && cur === "USD"
    && !isBTrainEquip(match.equip) && !match.customer){
-  gpTotal = toQuoteAmount(truckLinehaul(match, miles), nativeCur, cur) + truckFuelFor(miles, "USD");
+  gpTotal = toQuoteAmount(truckLinehaul(match, truckLinehaulMiles(match, miles)), nativeCur, cur) + truckFuelFor(miles, "USD");
 }else{
   const gpTotalNative = isRail ? railFlat : (match ? _gpTotalForCompare(match, miles) : 0);
   gpTotal = toQuoteAmount(gpTotalNative, nativeCur, cur);
